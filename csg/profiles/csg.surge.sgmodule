@@ -1,16 +1,14 @@
 #!name= 南方电网
-#!desc= 南网在线余额/用电查询 · Token 捕获 · 定时通知 · Scriptable 接口
+#!desc= 南网在线 · App 捕获 Token + Scriptable 小组件接口（无定时通知）
 #!author= local
-#!category= 通用重写
-#!arguments= CRONEXP:"0 9 * * *",PHONE:"",PASSWORD:"",AREA:"广东",CSG:"南方电网",调试模式:false,近期用量:false,通知全部户号:true,TIMEOUT:120,SCRIPT:"https://raw.githubusercontent.com/m0e16/95598-Widgets/main/csg/csg.js"
-#!arguments-desc= SCRIPT: 默认指向本仓库 raw；也可改成 Surge 本地脚本名\n\nCRONEXP: 默认每天 9 点；只要小组件可设 "0 0 30 2 *"\n\nPHONE: 南网手机号（短信登录用）\n\nPASSWORD: 可选\n\nAREA: 广东/广西/云南/贵州/海南\n\nCSG: 填 # 禁用接口重写\n\n调试模式 / 近期用量 / 通知全部户号: true 或 false\n\nTIMEOUT: 建议 120\n\n登录: 打开「南网在线」自动捕获 Token；或 cron 手动 argument: action=send_sms / action=login_sms&code=xxxx
+#!category= 🔧 Tools
+#!arguments= TIMEOUT:120,调试模式:false
+#!arguments-desc= TIMEOUT: 小组件拉数时脚本超时秒数，建议 120\n\n调试模式: true/1 时在脚本控制台输出详细请求日志\n\n使用方法：\n1. 安装并启用本模块，开启 MitM + 脚本\n2. 打开「南网在线」App，进入电费/用电页面自动捕获 Token\n3. Scriptable 小组件请求 https://api.csg-rewrite.com/electricity/bill/all
 
 [Script]
-南网Token捕获 = type=http-request, pattern=^https?:\/\/95598\.csg\.cn\/ucs\/ma\/, script-path={{{SCRIPT}}}, requires-body=false, timeout=10
+南网Token捕获 = type=http-request, pattern=^https?:\/\/95598\.csg\.cn\/ucs\/ma\/, script-path=https://raw.githubusercontent.com/m0e16/95598-Widgets/main/csg/csg.js, requires-body=false, timeout=10
 
-{{{CSG}}}接口重写 = type=http-request, pattern=^https?:\/\/api\.csg-rewrite\.com\/electricity\/bill\/all, script-path={{{SCRIPT}}}, requires-body=true, max-size=-1, timeout={{{TIMEOUT}}}
-
-南方电网 = type=cron, cronexp="{{{CRONEXP}}}", script-path={{{SCRIPT}}}, timeout={{{TIMEOUT}}}, argument=phone="{{{PHONE}}}"&password="{{{PASSWORD}}}"&area="{{{AREA}}}"&debug="{{{调试模式}}}"&show_recent="{{{近期用量}}}"&notify_all="{{{通知全部户号}}}"
+南网小组件接口 = type=http-request, pattern=^https?:\/\/api\.csg-rewrite\.com\/electricity\/bill\/all, script-path=https://raw.githubusercontent.com/m0e16/95598-Widgets/main/csg/csg.js, requires-body=true, max-size=-1, timeout={{{TIMEOUT}}}, argument=debug="{{{调试模式}}}"
 
 [MITM]
 hostname = %APPEND% 95598.csg.cn, api.csg-rewrite.com
