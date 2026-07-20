@@ -4,13 +4,13 @@
 /**
  * 南方电网 · Scriptable 小组件 v1.5.1
  *
- * - 深色背景：纯色 #292929（原 bg 图取色），无背景图
+ * - 深色背景：Color.dynamic（浅 #F0F5FC / 深 #292929）
  * - Logo：浅色 csg.png / 深色 csg-white.png
  * - 中号左右分栏；大号竖柱居中；地址广西缩写 + 截到路号
  *
  */
 
-const VERSION = "1.5.1";
+const VERSION = "1.5.2";
 const DEFAULT_URL = "https://api.csg-rewrite.com/electricity/bill/all";
 const ASSET_BASE =
   "https://raw.githubusercontent.com/m0e16/95598-Widgets/main/scriptable/assets";
