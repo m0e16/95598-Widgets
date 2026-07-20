@@ -99,8 +99,11 @@ https://raw.githubusercontent.com/m0e16/95598-Widgets/main/csg/scriptable/csg-wi
 ```
 
 - `index`：多户号时选第几个（从 0 开始；接口返回全部户号）  
-- `showRecent`：中/大尺寸是否显示近五日  
+- `showRecent`：中/大尺寸是否显示近五日柱状图  
 - `refreshMinutes`：提示 iOS 约多少分钟后再刷新（默认 60，仅建议）  
+
+Logo 使用仓库内 `scriptable/assets/csg.png`（首次运行会下载并缓存到本机）。  
+支持系统 **浅色 / 深色** 外观自动切换。空字段（如本月电费为 null）不再显示 `--`。  
 
 ### 数据流
 
