@@ -429,7 +429,8 @@ function addHeader(w, theme, logo) {
   head.centerAlignContent();
 
   const title = head.addText("南方电网");
-  title.font = Font.boldSystemFont(isSmall ? 13 : 14);
+  // 中/大号标题略加大
+  title.font = Font.boldSystemFont(isSmall ? 13 : isMedium ? 16 : 17);
   title.textColor = theme.text;
 
   head.addSpacer();
@@ -478,14 +479,18 @@ function addFooter(w, theme, addr, meta) {
   }
 }
 
-/** 中号：左文字 / 右柱图 */
+/**
+ * 中号：左文字 / 右柱图
+ * - 正文区 bottom 对齐：右侧柱图底边对齐左侧「上月」一行
+ * - 地址单独在下方，略向右缩进
+ */
 function buildMediumSplit(w, theme, ctx) {
   const body = w.addStack();
   body.layoutHorizontally();
-  body.topAlignContent();
+  body.bottomAlignContent();
   body.spacing = 10;
 
-  // —— 左：余额 + 指标 + 地址 ——
+  // —— 左：余额 + 指标（不含地址）——
   const left = body.addStack();
   left.layoutVertically();
   left.spacing = 3;
@@ -514,30 +519,41 @@ function buildMediumSplit(w, theme, ctx) {
   }
   if (n(ctx.last.totalKwh) != null || n(ctx.last.totalCost) != null) {
     const bits = [];
-    if (n(ctx.last.totalKwh) != null) bits.push(`${fmt(ctx.last.totalKwh, 0)} kWh`);
-    if (n(ctx.last.totalCost) != null) bits.push(`${fmt(ctx.last.totalCost, 0)} 元`);
+    if (n(ctx.last.totalKwh) != null)
+      bits.push(`${fmt(ctx.last.totalKwh, 0)} kWh`);
+    if (n(ctx.last.totalCost) != null)
+      bits.push(`${fmt(ctx.last.totalCost, 0)} 元`);
     addLeftLine(left, "上月", bits.join(" "), theme);
   } else if (n(ctx.year.yearKwh) != null) {
     addLeftLine(left, "本年", `${fmt(ctx.year.yearKwh, 0)} kWh`, theme);
   }
 
-  left.addSpacer(6);
-  const addrT = left.addText(ctx.addr || "南网户号");
-  addrT.font = Font.systemFont(9);
-  addrT.textColor = theme.text3;
-  addrT.lineLimit = 1;
-  if (ctx.meta.multi > 1) {
-    const idx = left.addText(`${ctx.meta.index + 1}/${ctx.meta.multi}`);
-    idx.font = Font.systemFont(9);
-    idx.textColor = theme.text3;
-  }
-
-  // —— 右：近五日横向柱（紧凑）——
+  // —— 右：近五日横向柱（左对齐填充）——
   if (SHOW_RECENT && ctx.recent.length) {
     const right = body.addStack();
     right.layoutVertically();
     right.spacing = 0;
     addRecentBarsHorizontalCompact(right, ctx.recent, theme);
+  }
+
+  // —— 地址：整行在正文下方，略向右缩 ——
+  w.addSpacer(6);
+  const foot = w.addStack();
+  foot.layoutHorizontally();
+  foot.centerAlignContent();
+  // 往右挪一点，别贴左边缘
+  const indent = foot.addStack();
+  indent.size = new Size(6, 1);
+  const addrT = foot.addText(ctx.addr || "南网户号");
+  addrT.font = Font.systemFont(9);
+  addrT.textColor = theme.text3;
+  addrT.lineLimit = 1;
+  addrT.minimumScaleFactor = 0.8;
+  foot.addSpacer();
+  if (ctx.meta.multi > 1) {
+    const idx = foot.addText(`${ctx.meta.index + 1}/${ctx.meta.multi}`);
+    idx.font = Font.systemFont(9);
+    idx.textColor = theme.text3;
   }
 }
 
@@ -693,7 +709,10 @@ function addRecentBarsVertical(parent, recent, theme) {
   }
 }
 
-/** 中号右侧：紧凑横向柱 */
+/**
+ * 中号右侧：紧凑横向柱
+ * 轨道内用 fill + 右侧空白 spacer，保证蓝色从最左侧开始（避免 iOS 居中）
+ */
 function addRecentBarsHorizontalCompact(parent, recent, theme) {
   const maxK = Math.max(...recent.map((r) => n(r.kwh) || 0), 0.01);
   const trackW = 72;
@@ -702,11 +721,13 @@ function addRecentBarsHorizontalCompact(parent, recent, theme) {
   const title = parent.addText("近五日");
   title.font = Font.systemFont(8);
   title.textColor = theme.text3;
+  title.leftAlignText();
   parent.addSpacer(3);
 
   for (const day of recent) {
     const kwh = n(day.kwh) || 0;
     const fillW = Math.max(3, Math.round((kwh / maxK) * trackW));
+    const restW = Math.max(0, trackW - fillW);
 
     const row = parent.addStack();
     row.layoutHorizontally();
@@ -715,24 +736,34 @@ function addRecentBarsHorizontalCompact(parent, recent, theme) {
 
     const dateBox = row.addStack();
     dateBox.size = new Size(32, 10);
+    dateBox.layoutHorizontally();
     const dt = dateBox.addText(fmtMD(day.date));
     dt.font = Font.systemFont(7);
     dt.textColor = theme.text3;
     dt.lineLimit = 1;
+    dt.leftAlignText();
     dt.minimumScaleFactor = 0.7;
 
+    // 固定宽轨道：左填充 + 右空白 → 柱从左边长出
     const track = row.addStack();
     track.layoutHorizontally();
     track.size = new Size(trackW, trackH);
     track.backgroundColor = theme.barTrack;
     track.cornerRadius = 2;
+
     const fill = track.addStack();
     fill.size = new Size(fillW, trackH);
     fill.backgroundColor = theme.bar;
     fill.cornerRadius = 2;
 
+    if (restW > 0) {
+      const rest = track.addStack();
+      rest.size = new Size(restW, trackH);
+    }
+
     const valBox = row.addStack();
     valBox.size = new Size(22, 10);
+    valBox.layoutHorizontally();
     const vt = valBox.addText(fmt(kwh, 1));
     vt.font = Font.systemFont(7);
     vt.textColor = theme.text2;
