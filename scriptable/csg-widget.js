@@ -2,12 +2,12 @@
 // These must be at the very top of the file. Do not edit.
 // icon-color: blue; icon-glyph: bolt;
 /**
- * 南方电网小组件 v1.5.4
+ * 南方电网小组件 v1.5.5
  * Surge 模块 + Token 捕获 → api.csg-rewrite.com
  * Logo：csg-white.png 模板 + tintColor（品牌蓝 #0A2366 / 白）
  */
 
-const VERSION = "1.5.4";
+const VERSION = "1.5.5";
 const DEFAULT_URL = "https://api.csg-rewrite.com/electricity/bill/all";
 const ASSET_BASE =
   "https://raw.githubusercontent.com/m0e16/95598-Widgets/main/scriptable/assets";
@@ -265,10 +265,11 @@ function addHeader(w, t, logo) {
   head.layoutHorizontally();
   head.centerAlignContent();
   const title = head.addText("南方电网");
-  title.font = Font.boldSystemFont(isSmall ? 13 : isMedium ? 16 : 17);
+  // 中号 / 大号标题加大；Logo 同步加大
+  title.font = Font.boldSystemFont(isSmall ? 13 : isMedium ? 18 : 20);
   title.textColor = t.text;
   head.addSpacer();
-  addLogo(head, logo, t, isSmall ? 34 : isMedium ? 38 : 46);
+  addLogo(head, logo, t, isSmall ? 34 : isMedium ? 44 : 54);
 }
 
 function addBalance(parent, t, balVal, arrears, compact) {
@@ -340,12 +341,7 @@ function buildMedium(w, t, ctx) {
     addLeftLine(left, "本月", `${fmt(m.totalKwh, 1)} kWh`, t);
   }
   if (num(d.yesterday) != null) {
-    addLeftLine(
-      left,
-      d.latestDay ? fmtMD(d.latestDay) : "昨日",
-      `${fmt(d.yesterday, 1)} kWh`,
-      t
-    );
+    addLeftLine(left, "昨日", `${fmt(d.yesterday, 1)} kWh`, t);
   }
   if (num(last.totalKwh) != null || num(last.totalCost) != null) {
     const bits = [];
@@ -379,125 +375,135 @@ function buildSmall(w, t, m, d) {
     line.lineLimit = 1;
     line.minimumScaleFactor = 0.8;
   }
+  // API 的 yesterday 字段：固定显示「昨日」，勿显示「近」或日期碎片
   if (num(d.yesterday) != null) {
-    const y = w.addText(
-      `${d.latestDay ? fmtMD(d.latestDay) : "近"} ${fmt(d.yesterday, 1)} kWh`
-    );
+    const y = w.addText(`昨日 ${fmt(d.yesterday, 1)} kWh`);
     y.font = Font.systemFont(10);
     y.textColor = t.text3;
     y.lineLimit = 1;
   }
 }
 
+/**
+ * 大号指标：固定 2×3 槽位 + 等宽列，保证上下列对齐
+ *  [本月电量] [昨日]     [上月]
+ *  [本年电量] [本年电费]  [ ]
+ */
 function buildLarge(w, t, m, d, last, year) {
-  const metrics = [];
-  if (num(m.totalKwh) != null)
-    metrics.push(["本月电量", `${fmt(m.totalKwh, 1)} kWh`]);
-  if (num(m.totalCost) != null)
-    metrics.push(["本月电费", `${fmt(m.totalCost, 2)} 元`]);
-  if (num(d.yesterday) != null) {
-    metrics.push([
-      d.latestDay ? fmtMD(d.latestDay) : "昨日",
-      `${fmt(d.yesterday, 1)} kWh`,
-    ]);
-  }
-  if (num(last.totalKwh) != null || num(last.totalCost) != null) {
+  const lastTxt = (() => {
+    if (num(last.totalKwh) == null && num(last.totalCost) == null) return null;
     const bits = [];
     if (num(last.totalKwh) != null) bits.push(`${fmt(last.totalKwh, 0)} kWh`);
     if (num(last.totalCost) != null) bits.push(`${fmt(last.totalCost, 2)} 元`);
-    metrics.push(["上月", bits.join(" / ")]);
-  }
-  if (num(year.yearKwh) != null)
-    metrics.push(["本年电量", `${fmt(year.yearKwh, 0)} kWh`]);
-  if (num(year.yearCost) != null)
-    metrics.push(["本年电费", `${fmt(year.yearCost, 2)} 元`]);
+    return bits.join(" / ");
+  })();
 
-  for (let i = 0; i < metrics.length; i += 3) {
-    if (i) w.addSpacer(6);
+  const grid = [
+    [
+      num(m.totalKwh) != null ? ["本月电量", `${fmt(m.totalKwh, 1)} kWh`] : null,
+      num(d.yesterday) != null ? ["昨日", `${fmt(d.yesterday, 1)} kWh`] : null,
+      lastTxt != null ? ["上月", lastTxt] : null,
+    ],
+    [
+      num(year.yearKwh) != null
+        ? ["本年电量", `${fmt(year.yearKwh, 0)} kWh`]
+        : null,
+      num(year.yearCost) != null
+        ? ["本年电费", `${fmt(year.yearCost, 2)} 元`]
+        : null,
+      num(m.totalCost) != null
+        ? ["本月电费", `${fmt(m.totalCost, 2)} 元`]
+        : null,
+    ],
+  ];
+
+  // 大号内容区约 300pt，三等分
+  const colW = 96;
+
+  for (let r = 0; r < grid.length; r++) {
+    if (r) w.addSpacer(10);
     const row = w.addStack();
     row.layoutHorizontally();
     row.spacing = 8;
-    for (const [lab, val] of metrics.slice(i, i + 3)) {
-      const col = row.addStack();
-      col.layoutVertically();
-      col.spacing = 2;
-      const l = col.addText(lab);
-      l.font = Font.systemFont(10);
-      l.textColor = t.text3;
-      l.lineLimit = 1;
-      const v = col.addText(val);
-      v.font = Font.mediumSystemFont(12);
-      v.textColor = t.text;
-      v.lineLimit = 1;
-      v.minimumScaleFactor = 0.7;
+    for (let c = 0; c < 3; c++) {
+      const cell = row.addStack();
+      cell.layoutVertically();
+      cell.spacing = 3;
+      cell.size = new Size(colW, 0);
+      const item = grid[r][c];
+      if (item) {
+        const l = cell.addText(item[0]);
+        l.font = Font.systemFont(11);
+        l.textColor = t.text3;
+        l.lineLimit = 1;
+        const v = cell.addText(item[1]);
+        v.font = Font.mediumSystemFont(13);
+        v.textColor = t.text;
+        v.lineLimit = 1;
+        v.minimumScaleFactor = 0.65;
+      }
     }
   }
 }
 
-/** 大号竖柱 */
+/**
+ * 大号竖柱：列间弹性 spacer 铺满宽度，减少左侧挤作一团
+ */
 function barsVertical(parent, recent, t) {
   const maxK = Math.max(...recent.map((r) => num(r.kwh) || 0), 0.01);
-  const barMaxH = 42;
-  const colW = 40;
-  const barW = 28;
+  const barMaxH = 56;
+  const barW = 30;
 
   const title = parent.addText("近五日用电");
-  title.font = Font.systemFont(9);
+  title.font = Font.systemFont(10);
   title.textColor = t.text3;
-  parent.addSpacer(4);
+  parent.addSpacer(6);
 
   const row = parent.addStack();
   row.layoutHorizontally();
-  row.spacing = 6;
   row.bottomAlignContent();
   row.centerAlignContent();
 
-  for (const day of recent) {
+  recent.forEach((day, i) => {
+    if (i > 0) row.addSpacer(); // 弹性间距 → 整行铺开
+
     const kwh = num(day.kwh) || 0;
-    const h = Math.max(4, Math.round((kwh / maxK) * barMaxH));
+    const h = Math.max(6, Math.round((kwh / maxK) * barMaxH));
 
     const col = row.addStack();
     col.layoutVertically();
     col.centerAlignContent();
-    col.spacing = 3;
-    col.size = new Size(colW, 0);
+    col.spacing = 4;
 
-    const top = col.addStack();
-    top.layoutHorizontally();
-    top.size = new Size(colW, 11);
-    top.centerAlignContent();
-    const vt = top.addText(fmt(kwh, 1));
-    vt.font = Font.systemFont(8);
+    const vt = col.addText(fmt(kwh, 1));
+    vt.font = Font.systemFont(9);
     vt.textColor = t.text2;
     vt.centerAlignText();
-    vt.minimumScaleFactor = 0.65;
+    vt.minimumScaleFactor = 0.7;
 
+    // 固定柱高区，底对齐
     const zone = col.addStack();
     zone.layoutVertically();
-    zone.size = new Size(colW, barMaxH);
+    zone.size = new Size(barW + 8, barMaxH);
     zone.centerAlignContent();
     zone.bottomAlignContent();
     const gap = zone.addStack();
     gap.size = new Size(barW, Math.max(0, barMaxH - h));
     const barWrap = zone.addStack();
     barWrap.layoutHorizontally();
-    barWrap.size = new Size(colW, h);
+    barWrap.size = new Size(barW + 8, h);
     barWrap.centerAlignContent();
     const bar = barWrap.addStack();
     bar.size = new Size(barW, h);
     bar.backgroundColor = t.bar;
-    bar.cornerRadius = 4;
+    bar.cornerRadius = 5;
 
-    const bot = col.addStack();
-    bot.layoutHorizontally();
-    bot.size = new Size(colW, 11);
-    bot.centerAlignContent();
-    const dt = bot.addText(fmtMD(day.date));
-    dt.font = Font.systemFont(8);
+    const dt = col.addText(fmtMD(day.date));
+    dt.font = Font.systemFont(9);
     dt.textColor = t.text3;
     dt.centerAlignText();
-    dt.minimumScaleFactor = 0.65;
-  }
+    dt.minimumScaleFactor = 0.7;
+  });
 }
 
 /** 中号横柱（fill 从左长出） */
