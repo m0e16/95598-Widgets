@@ -69,7 +69,7 @@
       color: #0b1f3a;
     }
     .widget.dark {
-      background: #2c2c2e url("./assets/bg-dark.png") center/cover;
+      background: #292929;
       color: #fff;
     }
     .w-head {
@@ -270,7 +270,8 @@
       const recent = d.recent || [];
       const maxK = Math.max(...recent.map((r) => r.kwh), 0.01);
 
-      const logo = `<img class="w-logo" src="./assets/csg.png" alt="logo" onerror="this.style.display='none'" />`;
+      const logoSrc = themeName === "dark" ? "./assets/csg-white.png" : "./assets/csg.png";
+      const logo = `<img class="w-logo" src="${logoSrc}" alt="logo" onerror="this.style.display='none'" />`;
 
       if (size === "medium") {
         const lines = [];

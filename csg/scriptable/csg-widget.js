@@ -2,25 +2,26 @@
 // These must be at the very top of the file. Do not edit.
 // icon-color: blue; icon-glyph: bolt;
 /**
- * 南方电网 · Scriptable 小组件 v1.5.0
+ * 南方电网 · Scriptable 小组件 v1.5.1
  *
- * - 地址截到「XX路XX号」
- * - 大号纵向柱：电量/日期与柱同宽居中、底对齐
- * - 中号：左侧文字指标，右侧横向五日柱（避免超高裁切）
- * - 余额 ≤5 红色；深色底图；无「实时」角标
+ * - 深色背景：纯色 #292929（原 bg 图取色），无背景图
+ * - Logo：浅色 csg.png / 深色 csg-white.png
+ * - 中号左右分栏；大号竖柱居中；地址广西缩写 + 截到路号
  *
- * 浏览器预览（无需贴 iOS）：打开同目录 preview.html
+ * 浏览器预览：同目录 preview.html
  */
 
-const VERSION = "1.5.0";
+const VERSION = "1.5.1";
 const DEFAULT_URL = "https://api.csg-rewrite.com/electricity/bill/all";
-const LOGO_URL =
-  "https://raw.githubusercontent.com/m0e16/95598-Widgets/main/csg/scriptable/assets/csg.png";
-const BG_DARK_URL =
-  "https://raw.githubusercontent.com/m0e16/95598-Widgets/main/csg/scriptable/assets/bg-dark.png";
+const ASSET_BASE =
+  "https://raw.githubusercontent.com/m0e16/95598-Widgets/main/csg/scriptable/assets";
+const LOGO_LIGHT_URL = `${ASSET_BASE}/csg.png`;
+const LOGO_DARK_URL = `${ASSET_BASE}/csg-white.png`;
+/** 深色模式背景（原 bg-dark.png 取色） */
+const BG_DARK_HEX = "#292929";
 const CACHE_FILE = "csg-widget-cache.json";
-const LOGO_CACHE = "csg-logo.png";
-const BG_DARK_CACHE = "csg-bg-dark.png";
+const LOGO_LIGHT_CACHE = "csg-logo.png";
+const LOGO_DARK_CACHE = "csg-logo-white.png";
 const REQUEST_TIMEOUT = 110;
 const DEFAULT_REFRESH_MINUTES = 60;
 /**
@@ -70,8 +71,10 @@ function dyn(lightHex, darkHex, lightAlpha, darkAlpha) {
 
 function getTheme() {
   return {
-    bg0: dyn("#E8F2FF", "#2C2C2E"),
-    bg1: dyn("#F5F9FF", "#1C1C1E"),
+    // 浅色渐变；深色纯色 #292929
+    bg0: dyn("#E8F2FF", BG_DARK_HEX),
+    bg1: dyn("#F5F9FF", BG_DARK_HEX),
+    bgDarkSolid: new Color(BG_DARK_HEX),
     text: dyn("#0B1F3A", "#FFFFFF"),
     text2: dyn("#3D4F63", "#FFFFFF", 1, 0.82),
     text3: dyn("#7A8796", "#FFFFFF", 1, 0.55),
@@ -102,7 +105,7 @@ function balanceUnitColor(theme, balVal, isArrears) {
 
 async function main() {
   const theme = getTheme();
-  const [logo, bgDark] = await Promise.all([loadLogo(), loadDarkBg()]);
+  const logo = await loadLogo();
 
   let payload;
   try {
@@ -113,7 +116,7 @@ async function main() {
     if (cached?.data) {
       payload = cached.data;
     } else {
-      const w = errorWidget(friendlyError(e), theme, logo, bgDark);
+      const w = errorWidget(friendlyError(e), theme, logo);
       setRefresh(w);
       await present(w);
       return;
@@ -125,8 +128,7 @@ async function main() {
     const w = errorWidget(
       "无户号数据。请打开「南网在线」进入电费页捕获 Token。",
       theme,
-      logo,
-      bgDark
+      logo
     );
     setRefresh(w);
     await present(w);
@@ -135,7 +137,7 @@ async function main() {
 
   const index = Math.min(ACCOUNT_INDEX, list.length - 1);
   const item = enrichItem(list[index]);
-  const w = buildWidget(item, theme, logo, bgDark, {
+  const w = buildWidget(item, theme, logo, {
     multi: list.length,
     index,
   });
@@ -271,12 +273,18 @@ async function loadCachedImage(url, cacheName) {
   }
 }
 
+/** 按系统外观选 Logo：深色用白版，浅色用彩色版 */
 async function loadLogo() {
-  return loadCachedImage(LOGO_URL, LOGO_CACHE);
-}
-
-async function loadDarkBg() {
-  return loadCachedImage(BG_DARK_URL, BG_DARK_CACHE);
+  if (isDark) {
+    return (
+      (await loadCachedImage(LOGO_DARK_URL, LOGO_DARK_CACHE)) ||
+      (await loadCachedImage(LOGO_LIGHT_URL, LOGO_LIGHT_CACHE))
+    );
+  }
+  return (
+    (await loadCachedImage(LOGO_LIGHT_URL, LOGO_LIGHT_CACHE)) ||
+    (await loadCachedImage(LOGO_DARK_URL, LOGO_DARK_CACHE))
+  );
 }
 
 // -------------------- Format --------------------
@@ -342,13 +350,9 @@ async function present(w) {
   Script.complete();
 }
 
-function applyBackground(w, theme, bgDark) {
-  if (isDark && bgDark) {
-    w.backgroundImage = bgDark;
-    return;
-  }
+function applyBackground(w, theme) {
   if (isDark) {
-    w.backgroundColor = new Color("#2C2C2E");
+    w.backgroundColor = theme.bgDarkSolid;
     return;
   }
   const g = new LinearGradient();
@@ -359,11 +363,11 @@ function applyBackground(w, theme, bgDark) {
 
 // -------------------- Build UI --------------------
 
-function buildWidget(item, theme, logo, bgDark, meta) {
+function buildWidget(item, theme, logo, meta) {
   const w = new ListWidget();
   const pad = isSmall ? 10 : isMedium ? 10 : 14;
   w.setPadding(pad, pad + 2, pad, pad + 2);
-  applyBackground(w, theme, bgDark);
+  applyBackground(w, theme);
 
   const u = item.userInfo || {};
   const b = item.eleBill || {};
@@ -741,10 +745,10 @@ function addRecentBarsHorizontalCompact(parent, recent, theme) {
   }
 }
 
-function errorWidget(msg, theme, logo, bgDark) {
+function errorWidget(msg, theme, logo) {
   const w = new ListWidget();
   w.setPadding(12, 14, 12, 14);
-  applyBackground(w, theme, bgDark);
+  applyBackground(w, theme);
 
   const head = w.addStack();
   head.layoutHorizontally();
