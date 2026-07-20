@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>南方电网小组件预览 · v1.5</title>
+  <style>
+    :root {
+      --phone-bg: #1a1028;
+      --wall: linear-gradient(160deg, #7b6bb5 0%, #5a4a9a 40%, #8b7bc8 100%);
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Helvetica Neue", sans-serif;
+      background: #0d0d12;
+      color: #e8e8ed;
+      min-height: 100vh;
+      padding: 24px 16px 48px;
+    }
+    h1 { font-size: 20px; font-weight: 600; margin: 0 0 8px; }
+    .sub { color: #9898a6; font-size: 13px; margin-bottom: 20px; line-height: 1.5; }
+    .toolbar {
+      display: flex; flex-wrap: wrap; gap: 10px; align-items: center;
+      margin-bottom: 24px;
+    }
+    .toolbar label { font-size: 13px; color: #aaa; display: flex; align-items: center; gap: 6px; }
+    .toolbar button, .toolbar select {
+      background: #2c2c35; color: #fff; border: 1px solid #3a3a48;
+      border-radius: 8px; padding: 8px 12px; font-size: 13px; cursor: pointer;
+    }
+    .toolbar button:hover { background: #3a3a48; }
+    .toolbar button.active { background: #0a84ff; border-color: #0a84ff; }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 28px;
+    }
+    .card {
+      background: #16161e;
+      border-radius: 16px;
+      padding: 16px;
+      border: 1px solid #2a2a36;
+    }
+    .card h2 { font-size: 14px; font-weight: 500; color: #9898a6; margin: 0 0 12px; }
+    .stage {
+      border-radius: 20px;
+      padding: 28px 20px 36px;
+      background: var(--wall);
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      min-height: 220px;
+    }
+    /* —— Widget shells（约 iOS 点尺寸 ×2 方便看）—— */
+    .widget {
+      border-radius: 22px;
+      overflow: hidden;
+      box-shadow: 0 12px 40px rgba(0,0,0,.35);
+      position: relative;
+      display: flex;
+      flex-direction: column;
+    }
+    .widget.small { width: 155px; height: 155px; padding: 12px; }
+    .widget.medium { width: 329px; height: 155px; padding: 12px 14px; }
+    .widget.large { width: 329px; height: 345px; padding: 16px; }
+    .widget.light {
+      background: linear-gradient(165deg, #e8f2ff 0%, #f5f9ff 100%);
+      color: #0b1f3a;
+    }
+    .widget.dark {
+      background: #2c2c2e url("./assets/bg-dark.png") center/cover;
+      color: #fff;
+    }
+    .w-head {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .w-title { font-weight: 700; font-size: 14px; }
+    .widget.small .w-title { font-size: 13px; }
+    .w-logo {
+      width: 38px; height: 38px; border-radius: 8px;
+      object-fit: contain; background: transparent;
+    }
+    .widget.small .w-logo { width: 34px; height: 34px; }
+    .widget.large .w-logo { width: 46px; height: 46px; }
+    .w-bal { margin-top: 6px; display: flex; align-items: baseline; gap: 2px; flex-shrink: 0; }
+    .w-bal .lbl { font-size: 11px; opacity: .55; margin-right: 2px; }
+    .w-bal .num { font-size: 26px; font-weight: 700; letter-spacing: -0.5px; }
+    .widget.small .w-bal .num { font-size: 22px; }
+    .widget.medium .w-bal .num { font-size: 22px; }
+    .w-bal .unit { font-size: 12px; opacity: .75; }
+    .w-bal.danger .num, .w-bal.danger .unit { color: #ff453a; }
+    .widget.light .w-bal.danger .num, .widget.light .w-bal.danger .unit { color: #d70015; }
+    .muted { opacity: .55; font-size: 10px; }
+    .muted2 { opacity: .75; font-size: 11px; }
+    .metrics {
+      display: flex; flex-wrap: wrap; gap: 8px 12px; margin-top: 8px;
+    }
+    .metric { min-width: 72px; }
+    .metric .k { font-size: 10px; opacity: .55; }
+    .metric .v { font-size: 12px; font-weight: 500; margin-top: 2px; }
+    .line { font-size: 11px; margin-top: 4px; opacity: .85; }
+    .foot {
+      margin-top: auto; padding-top: 8px;
+      font-size: 9px; opacity: .55; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    /* medium split */
+    .med-body {
+      display: flex; gap: 10px; flex: 1; min-height: 0; margin-top: 4px;
+    }
+    .med-left { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+    .med-right { flex: 0 0 140px; display: flex; flex-direction: column; }
+    .left-line { font-size: 11px; }
+    .left-line span.k { opacity: .55; font-size: 10px; }
+    .left-line span.v { font-weight: 500; }
+    /* vertical bars */
+    .vbars {
+      display: flex; align-items: flex-end; justify-content: space-between;
+      gap: 6px; margin-top: 6px; height: 78px;
+    }
+    .vbar-col {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      justify-content: flex-end; gap: 3px; min-width: 0;
+    }
+    .vbar-col .val { font-size: 8px; opacity: .8; text-align: center; width: 100%; }
+    .vbar-col .date { font-size: 8px; opacity: .55; text-align: center; width: 100%; }
+    .vbar-track {
+      width: 28px; height: 42px; display: flex; flex-direction: column;
+      justify-content: flex-end; align-items: center;
+    }
+    .vbar-fill {
+      width: 28px; border-radius: 4px;
+      background: #0a84ff;
+    }
+    .widget.light .vbar-fill { background: #1a6bb5; }
+    /* horizontal bars */
+    .hbars { display: flex; flex-direction: column; gap: 4px; margin-top: 2px; }
+    .hbar-row {
+      display: grid; grid-template-columns: 32px 1fr 22px;
+      align-items: center; gap: 4px; font-size: 7px;
+    }
+    .hbar-row .d { opacity: .55; }
+    .hbar-row .n { opacity: .85; text-align: right; }
+    .hbar-track {
+      height: 6px; border-radius: 2px;
+      background: rgba(255,255,255,.14);
+      overflow: hidden;
+    }
+    .widget.light .hbar-track { background: rgba(11,92,171,.12); }
+    .hbar-fill {
+      height: 100%; border-radius: 2px; background: #0a84ff;
+    }
+    .widget.light .hbar-fill { background: #1a6bb5; }
+    .sec-title { font-size: 8px; opacity: .55; margin-bottom: 2px; }
+    .large-bars-wrap { margin-top: 10px; }
+    .large-bars-wrap .sec-title { font-size: 9px; margin-bottom: 4px; }
+    code { background: #2a2a36; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <h1>南方电网小组件预览</h1>
+  <p class="sub">
+    本地预览 v1.5 布局（非 Scriptable 像素级一致，但结构/密度对齐）。<br />
+    打开方式：双击本文件，或在仓库目录执行 <code>npx --yes serve csg/scriptable</code> 后访问 preview.html<br />
+    数据来自你提供的 API 样例（可改下方 JSON）。
+  </p>
+
+  <div class="toolbar">
+    <button type="button" id="btn-dark" class="active">深色</button>
+    <button type="button" id="btn-light">浅色</button>
+    <label>余额模拟
+      <select id="bal-sel">
+        <option value="26.4">26.40（正常）</option>
+        <option value="5">5.00（临界红）</option>
+        <option value="3.2">3.20（红色）</option>
+      </select>
+    </label>
+    <button type="button" id="btn-render">刷新预览</button>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+  <script>
+    // 样例数据（你的 API 返回）
+    const SAMPLE = {
+      userInfo: {
+        accountNumber: "0401100099519533",
+        userName: "蒙瑞泓",
+        address: "广西壮族自治区南宁市青秀区长虹路10号万科城北区11号楼1单元30层3005室",
+        areaCode: "040100",
+      },
+      eleBill: { balance: 26.4, arrears: 0 },
+      dayElecQuantity: {
+        yesterday: 8.75,
+        latestDay: "2026-07-18",
+        recent: [
+          { date: "2026-07-14", kwh: 11.11 },
+          { date: "2026-07-15", kwh: 12.43 },
+          { date: "2026-07-16", kwh: 9.07 },
+          { date: "2026-07-17", kwh: 10.55 },
+          { date: "2026-07-18", kwh: 8.75 },
+        ],
+      },
+      monthElecQuantity: {
+        totalKwh: 177.99,
+        totalCost: null,
+        lastMonth: { totalKwh: 307, totalCost: 162.19 },
+        year: { yearKwh: 1519, yearCost: 802.49 },
+      },
+    };
+
+    function shortAddress(addr) {
+      if (!addr) return "";
+      const m = String(addr).match(
+        /([\u4e00-\u9fa5A-Za-z0-9]{1,12}(?:路|街|道|巷|弄|大街)\d+号)/
+      );
+      return m ? m[1] : addr.slice(0, 12);
+    }
+    function fmt(v, d = 1) {
+      if (v == null || v === "") return "--";
+      return Number(v).toFixed(d);
+    }
+    function md(s) {
+      return String(s || "").slice(5, 10);
+    }
+
+    let theme = "dark";
+
+    function renderAll() {
+      const bal = Number(document.getElementById("bal-sel").value);
+      const data = JSON.parse(JSON.stringify(SAMPLE));
+      data.eleBill.balance = bal;
+      const root = document.getElementById("grid");
+      root.innerHTML = "";
+      for (const size of ["small", "medium", "large"]) {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `<h2>${size === "small" ? "小号 Small" : size === "medium" ? "中号 Medium" : "大号 Large"} · ${theme === "dark" ? "深色" : "浅色"}</h2>`;
+        const stage = document.createElement("div");
+        stage.className = "stage";
+        stage.appendChild(buildWidget(size, data, theme));
+        card.appendChild(stage);
+        root.appendChild(card);
+      }
+    }
+
+    function buildWidget(size, data, themeName) {
+      const el = document.createElement("div");
+      el.className = `widget ${size} ${themeName}`;
+      const low = data.eleBill.balance <= 5;
+      const addr = shortAddress(data.userInfo.address);
+      const m = data.monthElecQuantity;
+      const d = data.dayElecQuantity;
+      const recent = d.recent || [];
+      const maxK = Math.max(...recent.map((r) => r.kwh), 0.01);
+
+      const logo = `<img class="w-logo" src="./assets/csg.png" alt="logo" onerror="this.style.display='none'" />`;
+
+      if (size === "medium") {
+        const lines = [];
+        if (m.totalKwh != null) lines.push(`<div class="left-line"><span class="k">本月 </span><span class="v">${fmt(m.totalKwh, 1)} kWh</span></div>`);
+        if (d.yesterday != null) lines.push(`<div class="left-line"><span class="k">${md(d.latestDay)} </span><span class="v">${fmt(d.yesterday, 1)} kWh</span></div>`);
+        if (m.lastMonth?.totalKwh != null) {
+          lines.push(`<div class="left-line"><span class="k">上月 </span><span class="v">${fmt(m.lastMonth.totalKwh, 0)}度 ${fmt(m.lastMonth.totalCost, 0)}元</span></div>`);
+        }
+        const hbars = recent.map((r) => {
+          const pct = Math.max(4, (r.kwh / maxK) * 100);
+          return `<div class="hbar-row"><span class="d">${md(r.date)}</span><div class="hbar-track"><div class="hbar-fill" style="width:${pct}%"></div></div><span class="n">${fmt(r.kwh, 1)}</span></div>`;
+        }).join("");
+
+        el.innerHTML = `
+          <div class="w-head"><span class="w-title">南方电网</span>${logo}</div>
+          <div class="med-body">
+            <div class="med-left">
+              <div class="w-bal ${low ? "danger" : ""}"><span class="lbl">余额</span><span class="num">${fmt(data.eleBill.balance, 2)}</span><span class="unit"> 元</span></div>
+              ${lines.join("")}
+              <div class="foot" style="margin-top:auto;padding-top:6px">${addr}</div>
+            </div>
+            <div class="med-right">
+              <div class="sec-title">近五日</div>
+              <div class="hbars">${hbars}</div>
+            </div>
+          </div>`;
+        return el;
+      }
+
+      if (size === "small") {
+        el.innerHTML = `
+          <div class="w-head"><span class="w-title">南方电网</span>${logo}</div>
+          <div class="w-bal ${low ? "danger" : ""}"><span class="num">${fmt(data.eleBill.balance, 2)}</span><span class="unit"> 元</span></div>
+          <div class="line">本月 ${fmt(m.totalKwh, 1)} kWh</div>
+          <div class="line muted2">${md(d.latestDay)} ${fmt(d.yesterday, 1)} kWh</div>
+          <div class="foot">${addr}</div>`;
+        return el;
+      }
+
+      // large
+      const metrics = [
+        ["本月电量", `${fmt(m.totalKwh, 1)} kWh`],
+        [md(d.latestDay), `${fmt(d.yesterday, 1)} kWh`],
+        ["上月", `${fmt(m.lastMonth.totalKwh, 0)} kWh / ${fmt(m.lastMonth.totalCost, 2)} 元`],
+        ["本年电量", `${fmt(m.year.yearKwh, 0)} kWh`],
+        ["本年电费", `${fmt(m.year.yearCost, 2)} 元`],
+      ];
+      const metHtml = metrics.map(([k, v]) => `<div class="metric"><div class="k">${k}</div><div class="v">${v}</div></div>`).join("");
+      const vbars = recent.map((r) => {
+        const h = Math.max(4, Math.round((r.kwh / maxK) * 42));
+        return `<div class="vbar-col"><div class="val">${fmt(r.kwh, 1)}</div><div class="vbar-track"><div class="vbar-fill" style="height:${h}px"></div></div><div class="date">${md(r.date)}</div></div>`;
+      }).join("");
+
+      el.innerHTML = `
+        <div class="w-head"><span class="w-title">南方电网</span>${logo}</div>
+        <div class="w-bal ${low ? "danger" : ""}"><span class="lbl">余额</span><span class="num">${fmt(data.eleBill.balance, 2)}</span><span class="unit"> 元</span></div>
+        <div class="metrics">${metHtml}</div>
+        <div class="large-bars-wrap">
+          <div class="sec-title">近五日用电</div>
+          <div class="vbars">${vbars}</div>
+        </div>
+        <div class="foot">${addr}</div>`;
+      return el;
+    }
+
+    document.getElementById("btn-dark").onclick = () => {
+      theme = "dark";
+      document.getElementById("btn-dark").classList.add("active");
+      document.getElementById("btn-light").classList.remove("active");
+      renderAll();
+    };
+    document.getElementById("btn-light").onclick = () => {
+      theme = "light";
+      document.getElementById("btn-light").classList.add("active");
+      document.getElementById("btn-dark").classList.remove("active");
+      renderAll();
+    };
+    document.getElementById("btn-render").onclick = renderAll;
+    document.getElementById("bal-sel").onchange = renderAll;
+    renderAll();
+  </script>
+</body>
+</html>

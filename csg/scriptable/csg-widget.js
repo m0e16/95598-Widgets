@@ -2,15 +2,17 @@
 // These must be at the very top of the file. Do not edit.
 // icon-color: blue; icon-glyph: bolt;
 /**
- * 南方电网 · Scriptable 小组件 v1.4.0
+ * 南方电网 · Scriptable 小组件 v1.5.0
  *
- * - 明暗：文字/柱用 Color.dynamic；深色背景用 bg-dark.png
- * - 中号近五日：横向柱状图；大号：底对齐纵向柱
- * - 余额 ≤ 5 元红色警示；去掉「实时/缓存」角标
- * - Logo 加大；日期 MM-DD
+ * - 地址截到「XX路XX号」
+ * - 大号纵向柱：电量/日期与柱同宽居中、底对齐
+ * - 中号：左侧文字指标，右侧横向五日柱（避免超高裁切）
+ * - 余额 ≤5 红色；深色底图；无「实时」角标
+ *
+ * 浏览器预览（无需贴 iOS）：打开同目录 preview.html
  */
 
-const VERSION = "1.4.0";
+const VERSION = "1.5.0";
 const DEFAULT_URL = "https://api.csg-rewrite.com/electricity/bill/all";
 const LOGO_URL =
   "https://raw.githubusercontent.com/m0e16/95598-Widgets/main/csg/scriptable/assets/csg.png";
@@ -21,7 +23,6 @@ const LOGO_CACHE = "csg-logo.png";
 const BG_DARK_CACHE = "csg-bg-dark.png";
 const REQUEST_TIMEOUT = 110;
 const DEFAULT_REFRESH_MINUTES = 60;
-/** 余额低于等于该值时用红色显示 */
 const LOW_BALANCE = 5;
 
 const widgetFamily = config.widgetFamily || "medium";
@@ -63,7 +64,6 @@ function dyn(lightHex, darkHex, lightAlpha, darkAlpha) {
 
 function getTheme() {
   return {
-    // 浅色渐变底；深色优先用背景图，这两色作兜底
     bg0: dyn("#E8F2FF", "#2C2C2E"),
     bg1: dyn("#F5F9FF", "#1C1C1E"),
     text: dyn("#0B1F3A", "#FFFFFF"),
@@ -71,7 +71,6 @@ function getTheme() {
     text3: dyn("#7A8796", "#FFFFFF", 1, 0.55),
     bar: dyn("#1A6BB5", "#0A84FF"),
     barTrack: dyn("#0B5CAB", "#FFFFFF", 0.12, 0.14),
-    warn: dyn("#C93400", "#FFD60A"),
     danger: dyn("#D70015", "#FF453A"),
     error: dyn("#B85C00", "#FF9F0A"),
   };
@@ -84,8 +83,6 @@ async function main() {
   const [logo, bgDark] = await Promise.all([loadLogo(), loadDarkBg()]);
 
   let payload;
-  let fromCache = false;
-
   try {
     payload = await fetchBill();
     await saveCache(payload);
@@ -93,7 +90,6 @@ async function main() {
     const cached = loadCache();
     if (cached?.data) {
       payload = cached.data;
-      fromCache = true;
     } else {
       const w = errorWidget(friendlyError(e), theme, logo, bgDark);
       setRefresh(w);
@@ -118,7 +114,6 @@ async function main() {
   const index = Math.min(ACCOUNT_INDEX, list.length - 1);
   const item = enrichItem(list[index]);
   const w = buildWidget(item, theme, logo, bgDark, {
-    fromCache,
     multi: list.length,
     index,
   });
@@ -205,7 +200,7 @@ function friendlyError(e) {
   return msg;
 }
 
-// -------------------- Storage / assets --------------------
+// -------------------- Storage --------------------
 
 function fmLocal() {
   return FileManager.local();
@@ -279,7 +274,6 @@ function fmtOr(v, d, fb = "--") {
   return fmt(v, d) ?? fb;
 }
 
-/** MM-DD */
 function fmtMD(dateStr) {
   const s = String(dateStr || "");
   if (s.length >= 10) return s.slice(5, 10);
@@ -287,16 +281,26 @@ function fmtMD(dateStr) {
   return s || "--";
 }
 
-function shortAddress(addr, maxLen) {
+/**
+ * 地址截到「XX路/街/道XX号」
+ * 例：…青秀区长虹路10号万科城… → 长虹路10号
+ */
+function shortAddress(addr) {
   if (!addr) return "";
-  let s = String(addr)
-    .replace(
-      /^(.{2,3}壮族自治区|.{2,3}维吾尔自治区|.{2,3}回族自治区|.{2,3}自治区|.{2,3}省)/,
-      ""
-    )
-    .replace(/^广西/, "");
-  if (s.length > maxLen) s = s.slice(0, maxLen - 1) + "…";
-  return s;
+  const s = String(addr);
+  const m = s.match(
+    /([\u4e00-\u9fa5A-Za-z0-9]{1,12}(?:路|街|道|巷|弄|大街)\d+号)/
+  );
+  if (m) return m[1];
+  // 退路：仅门牌
+  const m2 = s.match(/(\d+号)/);
+  if (m2) {
+    const i = s.indexOf(m2[1]);
+    const head = s.slice(Math.max(0, i - 8), i + m2[1].length);
+    const m3 = head.match(/([\u4e00-\u9fa5]{1,8}(?:路|街|道|巷)?\d+号)/);
+    if (m3) return m3[1];
+  }
+  return s.length > 12 ? s.slice(0, 11) + "…" : s;
 }
 
 function setRefresh(w) {
@@ -330,7 +334,7 @@ function applyBackground(w, theme, bgDark) {
 
 function buildWidget(item, theme, logo, bgDark, meta) {
   const w = new ListWidget();
-  const pad = isSmall ? 10 : isMedium ? 11 : 14;
+  const pad = isSmall ? 10 : isMedium ? 10 : 14;
   w.setPadding(pad, pad + 2, pad, pad + 2);
   applyBackground(w, theme, bgDark);
 
@@ -340,81 +344,49 @@ function buildWidget(item, theme, logo, bgDark, meta) {
   const d = item.dayElecQuantity || {};
   const last = m.lastMonth || {};
   const year = m.year || {};
+  const recent = (d.recent || []).slice(-5).filter((r) => n(r.kwh) != null);
+
   const arrears = n(b.arrears) || 0;
   const isArrears =
     item.arrearsOfFees || arrears > 0 || (n(b.balance) || 0) < 0;
   const balVal = isArrears && arrears > 0 ? arrears : n(b.balance);
   const isLowBal = balVal != null && balVal <= LOW_BALANCE;
+  const addr = shortAddress(u.address || u.userName || u.accountNumber || "");
 
-  // —— Header：标题 + 大 Logo（无「实时」）——
   addHeader(w, theme, logo);
+  w.addSpacer(isMedium ? 4 : 6);
 
-  w.addSpacer(isMedium ? 5 : 6);
-
-  // —— 余额 ——
-  const balStack = w.addStack();
-  balStack.layoutHorizontally();
-  balStack.bottomAlignContent();
-
-  if (!isSmall) {
-    const balLabel = balStack.addText(isArrears ? "欠费 " : "余额 ");
-    balLabel.font = Font.systemFont(11);
-    balLabel.textColor = theme.text3;
-  }
-
-  const bal = balStack.addText(fmtOr(balVal, 2));
-  bal.font = Font.boldSystemFont(isSmall ? 22 : isMedium ? 24 : 28);
-  if (isArrears || isLowBal) {
-    bal.textColor = theme.danger;
+  if (isMedium) {
+    // 中号：左文案 + 右横向柱，控制总高度
+    buildMediumSplit(w, theme, {
+      balVal,
+      isArrears,
+      isLowBal,
+      m,
+      d,
+      last,
+      year,
+      recent,
+      addr,
+      meta,
+    });
   } else {
-    bal.textColor = theme.text;
-  }
+    addBalanceRow(w, theme, balVal, isArrears, isLowBal);
+    w.addSpacer(isSmall ? 4 : 6);
 
-  const unit = balStack.addText(" 元");
-  unit.font = Font.systemFont(isMedium ? 12 : 13);
-  unit.textColor = isLowBal || isArrears ? theme.danger : theme.text2;
-
-  w.addSpacer(isMedium ? 5 : 6);
-
-  // —— 指标 ——
-  if (isSmall) {
-    buildSmallBody(w, theme, m, d);
-  } else if (isMedium) {
-    buildMediumBody(w, theme, m, d, last, year);
-  } else {
-    buildLargeBody(w, theme, m, d, last, year);
-  }
-
-  // —— 近五日 ——
-  const recent = (d.recent || []).slice(-5).filter((r) => n(r.kwh) != null);
-  if (SHOW_RECENT && !isSmall && recent.length) {
-    w.addSpacer(isMedium ? 5 : 8);
-    if (isMedium) {
-      addRecentBarsHorizontal(w, recent, theme);
+    if (isSmall) {
+      buildSmallBody(w, theme, m, d);
     } else {
+      buildLargeBody(w, theme, m, d, last, year);
+    }
+
+    if (SHOW_RECENT && isLarge && recent.length) {
+      w.addSpacer(8);
       addRecentBarsVertical(w, recent, theme);
     }
-  }
 
-  // —— 页脚 ——
-  w.addSpacer(isMedium ? 4 : 6);
-  const foot = w.addStack();
-  foot.layoutHorizontally();
-  foot.centerAlignContent();
-  const addr = shortAddress(
-    u.address || u.userName || u.accountNumber || "",
-    isSmall ? 12 : isMedium ? 18 : 24
-  );
-  const f1 = foot.addText(addr || "南网户号");
-  f1.font = Font.systemFont(9);
-  f1.textColor = theme.text3;
-  f1.lineLimit = 1;
-  f1.minimumScaleFactor = 0.8;
-  foot.addSpacer();
-  if (meta.multi > 1) {
-    const idx = foot.addText(`${meta.index + 1}/${meta.multi}`);
-    idx.font = Font.systemFont(9);
-    idx.textColor = theme.text3;
+    w.addSpacer(isSmall ? 4 : 6);
+    addFooter(w, theme, addr, meta);
   }
 
   try {
@@ -435,12 +407,126 @@ function addHeader(w, theme, logo) {
   head.addSpacer();
 
   if (logo) {
-    // 加大 Logo
-    const logoSize = isSmall ? 34 : isMedium ? 40 : 48;
+    const logoSize = isSmall ? 34 : isMedium ? 38 : 46;
     const img = head.addImage(logo);
     img.imageSize = new Size(logoSize, logoSize);
     img.cornerRadius = 8;
   }
+}
+
+function addBalanceRow(w, theme, balVal, isArrears, isLowBal) {
+  const balStack = w.addStack();
+  balStack.layoutHorizontally();
+  balStack.bottomAlignContent();
+
+  if (!isSmall) {
+    const balLabel = balStack.addText(isArrears ? "欠费 " : "余额 ");
+    balLabel.font = Font.systemFont(11);
+    balLabel.textColor = theme.text3;
+  }
+
+  const bal = balStack.addText(fmtOr(balVal, 2));
+  bal.font = Font.boldSystemFont(isSmall ? 22 : 26);
+  bal.textColor = isArrears || isLowBal ? theme.danger : theme.text;
+
+  const unit = balStack.addText(" 元");
+  unit.font = Font.systemFont(12);
+  unit.textColor = isLowBal || isArrears ? theme.danger : theme.text2;
+}
+
+function addFooter(w, theme, addr, meta) {
+  const foot = w.addStack();
+  foot.layoutHorizontally();
+  foot.centerAlignContent();
+  const f1 = foot.addText(addr || "南网户号");
+  f1.font = Font.systemFont(9);
+  f1.textColor = theme.text3;
+  f1.lineLimit = 1;
+  foot.addSpacer();
+  if (meta.multi > 1) {
+    const idx = foot.addText(`${meta.index + 1}/${meta.multi}`);
+    idx.font = Font.systemFont(9);
+    idx.textColor = theme.text3;
+  }
+}
+
+/** 中号：左文字 / 右柱图 */
+function buildMediumSplit(w, theme, ctx) {
+  const body = w.addStack();
+  body.layoutHorizontally();
+  body.topAlignContent();
+  body.spacing = 10;
+
+  // —— 左：余额 + 指标 + 地址 ——
+  const left = body.addStack();
+  left.layoutVertically();
+  left.spacing = 3;
+
+  const balStack = left.addStack();
+  balStack.layoutHorizontally();
+  balStack.bottomAlignContent();
+  const balLabel = balStack.addText(ctx.isArrears ? "欠费 " : "余额 ");
+  balLabel.font = Font.systemFont(10);
+  balLabel.textColor = theme.text3;
+  const bal = balStack.addText(fmtOr(ctx.balVal, 2));
+  bal.font = Font.boldSystemFont(22);
+  bal.textColor =
+    ctx.isArrears || ctx.isLowBal ? theme.danger : theme.text;
+  const unit = balStack.addText(" 元");
+  unit.font = Font.systemFont(11);
+  unit.textColor =
+    ctx.isLowBal || ctx.isArrears ? theme.danger : theme.text2;
+
+  left.addSpacer(4);
+
+  if (n(ctx.m.totalKwh) != null) {
+    addLeftLine(left, "本月", `${fmt(ctx.m.totalKwh, 1)} kWh`, theme);
+  }
+  if (n(ctx.d.yesterday) != null) {
+    const yl = ctx.d.latestDay ? fmtMD(ctx.d.latestDay) : "昨日";
+    addLeftLine(left, yl, `${fmt(ctx.d.yesterday, 1)} kWh`, theme);
+  }
+  if (n(ctx.last.totalKwh) != null || n(ctx.last.totalCost) != null) {
+    const bits = [];
+    if (n(ctx.last.totalKwh) != null) bits.push(`${fmt(ctx.last.totalKwh, 0)}度`);
+    if (n(ctx.last.totalCost) != null) bits.push(`${fmt(ctx.last.totalCost, 0)}元`);
+    addLeftLine(left, "上月", bits.join(" "), theme);
+  } else if (n(ctx.year.yearKwh) != null) {
+    addLeftLine(left, "本年", `${fmt(ctx.year.yearKwh, 0)} kWh`, theme);
+  }
+
+  left.addSpacer(6);
+  const addrT = left.addText(ctx.addr || "南网户号");
+  addrT.font = Font.systemFont(9);
+  addrT.textColor = theme.text3;
+  addrT.lineLimit = 1;
+  if (ctx.meta.multi > 1) {
+    const idx = left.addText(`${ctx.meta.index + 1}/${ctx.meta.multi}`);
+    idx.font = Font.systemFont(9);
+    idx.textColor = theme.text3;
+  }
+
+  // —— 右：近五日横向柱（紧凑）——
+  if (SHOW_RECENT && ctx.recent.length) {
+    const right = body.addStack();
+    right.layoutVertically();
+    right.spacing = 0;
+    addRecentBarsHorizontalCompact(right, ctx.recent, theme);
+  }
+}
+
+function addLeftLine(parent, label, value, theme) {
+  const row = parent.addStack();
+  row.layoutHorizontally();
+  row.centerAlignContent();
+  const l = row.addText(label + " ");
+  l.font = Font.systemFont(10);
+  l.textColor = theme.text3;
+  const v = row.addText(value);
+  v.font = Font.mediumSystemFont(11);
+  v.textColor = theme.text;
+  v.lineLimit = 1;
+  v.minimumScaleFactor = 0.75;
 }
 
 function buildSmallBody(w, theme, m, d) {
@@ -460,28 +546,6 @@ function buildSmallBody(w, theme, m, d) {
     y.font = Font.systemFont(10);
     y.textColor = theme.text3;
     y.lineLimit = 1;
-  }
-}
-
-function buildMediumBody(w, theme, m, d, last, year) {
-  const row = w.addStack();
-  row.layoutHorizontally();
-  row.spacing = 8;
-
-  if (n(m.totalKwh) != null) {
-    addMetric(row, "本月", `${fmt(m.totalKwh, 1)} kWh`, theme, true);
-  }
-  if (n(d.yesterday) != null) {
-    const yl = d.latestDay ? fmtMD(d.latestDay) : "昨日";
-    addMetric(row, yl, `${fmt(d.yesterday, 1)} kWh`, theme, true);
-  }
-  if (n(last.totalKwh) != null || n(last.totalCost) != null) {
-    const bits = [];
-    if (n(last.totalKwh) != null) bits.push(`${fmt(last.totalKwh, 0)}`);
-    if (n(last.totalCost) != null) bits.push(`${fmt(last.totalCost, 0)}元`);
-    addMetric(row, "上月", bits.join("/"), theme, true);
-  } else if (n(year.yearKwh) != null) {
-    addMetric(row, "本年", `${fmt(year.yearKwh, 0)} kWh`, theme, true);
   }
 }
 
@@ -512,44 +576,41 @@ function buildLargeBody(w, theme, m, d, last, year) {
     row.layoutHorizontally();
     row.spacing = 8;
     for (const [label, value] of metrics.slice(i, i + 3)) {
-      addMetric(row, label, value, theme, false);
+      const col = row.addStack();
+      col.layoutVertically();
+      col.spacing = 2;
+      const l = col.addText(label);
+      l.font = Font.systemFont(10);
+      l.textColor = theme.text3;
+      l.lineLimit = 1;
+      const v = col.addText(value);
+      v.font = Font.mediumSystemFont(12);
+      v.textColor = theme.text;
+      v.lineLimit = 1;
+      v.minimumScaleFactor = 0.7;
     }
   }
 }
 
-function addMetric(parent, label, value, theme, compact) {
-  const col = parent.addStack();
-  col.layoutVertically();
-  col.spacing = compact ? 1 : 2;
-  const l = col.addText(label);
-  l.font = Font.systemFont(compact ? 9 : 10);
-  l.textColor = theme.text3;
-  l.lineLimit = 1;
-  l.minimumScaleFactor = 0.7;
-  const v = col.addText(value);
-  v.font = Font.mediumSystemFont(compact ? 11 : 12);
-  v.textColor = theme.text;
-  v.lineLimit = 1;
-  v.minimumScaleFactor = 0.65;
-}
-
 /**
- * 大号：纵向柱，固定柱区高度保证底对齐；日期 MM-DD 小字
+ * 大号纵向柱：列宽固定 = 柱宽，文字 centerAlignText，柱区固定高度底对齐
  */
 function addRecentBarsVertical(parent, recent, theme) {
   const maxK = Math.max(...recent.map((r) => n(r.kwh) || 0), 0.01);
-  const barMaxH = 40;
-  const barW = 30;
+  const barMaxH = 42;
+  const colW = 40; // 列宽，与文字居中对齐
+  const barW = 28;
 
   const title = parent.addText("近五日用电");
   title.font = Font.systemFont(9);
   title.textColor = theme.text3;
-  parent.addSpacer(3);
+  parent.addSpacer(4);
 
   const row = parent.addStack();
   row.layoutHorizontally();
-  row.spacing = 8;
+  row.spacing = 6;
   row.bottomAlignContent();
+  row.centerAlignContent();
 
   for (const day of recent) {
     const kwh = n(day.kwh) || 0;
@@ -558,50 +619,62 @@ function addRecentBarsVertical(parent, recent, theme) {
     const col = row.addStack();
     col.layoutVertically();
     col.centerAlignContent();
-    col.spacing = 2;
+    col.spacing = 3;
+    col.size = new Size(colW, 0);
 
-    const vt = col.addText(fmt(kwh, 1));
+    // 电量：固定宽容器 + 居中
+    const top = col.addStack();
+    top.layoutHorizontally();
+    top.size = new Size(colW, 11);
+    top.centerAlignContent();
+    const vt = top.addText(fmt(kwh, 1));
     vt.font = Font.systemFont(8);
     vt.textColor = theme.text2;
     vt.lineLimit = 1;
     vt.centerAlignText();
-    vt.minimumScaleFactor = 0.7;
+    vt.minimumScaleFactor = 0.65;
 
-    // 固定高度柱区 → 柱底对齐
+    // 柱区固定高，底对齐
     const zone = col.addStack();
     zone.layoutVertically();
-    zone.size = new Size(barW, barMaxH);
+    zone.size = new Size(colW, barMaxH);
+    zone.centerAlignContent();
     zone.bottomAlignContent();
 
     const gap = zone.addStack();
     gap.size = new Size(barW, Math.max(0, barMaxH - h));
 
-    const bar = zone.addStack();
+    const barWrap = zone.addStack();
+    barWrap.layoutHorizontally();
+    barWrap.size = new Size(colW, h);
+    barWrap.centerAlignContent();
+    const bar = barWrap.addStack();
     bar.size = new Size(barW, h);
     bar.backgroundColor = theme.bar;
     bar.cornerRadius = 4;
 
-    const dt = col.addText(fmtMD(day.date));
+    // 日期
+    const bot = col.addStack();
+    bot.layoutHorizontally();
+    bot.size = new Size(colW, 11);
+    bot.centerAlignContent();
+    const dt = bot.addText(fmtMD(day.date));
     dt.font = Font.systemFont(8);
     dt.textColor = theme.text3;
     dt.lineLimit = 1;
     dt.centerAlignText();
-    dt.minimumScaleFactor = 0.7;
+    dt.minimumScaleFactor = 0.65;
   }
 }
 
-/**
- * 中号：横向柱状图
- * MM-DD | ████░░░░ | 11.1
- */
-function addRecentBarsHorizontal(parent, recent, theme) {
+/** 中号右侧：紧凑横向柱 */
+function addRecentBarsHorizontalCompact(parent, recent, theme) {
   const maxK = Math.max(...recent.map((r) => n(r.kwh) || 0), 0.01);
-  // 轨道总宽（pt），柱填充按比例
-  const trackW = 120;
-  const trackH = 8;
+  const trackW = 72;
+  const trackH = 6;
 
-  const title = parent.addText("近五日用电");
-  title.font = Font.systemFont(9);
+  const title = parent.addText("近五日");
+  title.font = Font.systemFont(8);
   title.textColor = theme.text3;
   parent.addSpacer(3);
 
@@ -612,40 +685,36 @@ function addRecentBarsHorizontal(parent, recent, theme) {
     const row = parent.addStack();
     row.layoutHorizontally();
     row.centerAlignContent();
-    row.spacing = 6;
+    row.spacing = 4;
 
     const dateBox = row.addStack();
-    dateBox.size = new Size(34, 12);
-    dateBox.layoutHorizontally();
+    dateBox.size = new Size(32, 10);
     const dt = dateBox.addText(fmtMD(day.date));
-    dt.font = Font.systemFont(8);
+    dt.font = Font.systemFont(7);
     dt.textColor = theme.text3;
     dt.lineLimit = 1;
-    dt.minimumScaleFactor = 0.75;
+    dt.minimumScaleFactor = 0.7;
 
-    // 轨道（固定宽）+ 左侧填充柱
     const track = row.addStack();
     track.layoutHorizontally();
     track.size = new Size(trackW, trackH);
     track.backgroundColor = theme.barTrack;
-    track.cornerRadius = 3;
-
+    track.cornerRadius = 2;
     const fill = track.addStack();
     fill.size = new Size(fillW, trackH);
     fill.backgroundColor = theme.bar;
-    fill.cornerRadius = 3;
+    fill.cornerRadius = 2;
 
     const valBox = row.addStack();
-    valBox.size = new Size(28, 12);
-    valBox.layoutHorizontally();
+    valBox.size = new Size(22, 10);
     const vt = valBox.addText(fmt(kwh, 1));
-    vt.font = Font.mediumSystemFont(8);
+    vt.font = Font.systemFont(7);
     vt.textColor = theme.text2;
     vt.lineLimit = 1;
     vt.rightAlignText();
-    vt.minimumScaleFactor = 0.75;
+    vt.minimumScaleFactor = 0.7;
 
-    parent.addSpacer(3);
+    parent.addSpacer(2);
   }
 }
 
@@ -672,7 +741,6 @@ function errorWidget(msg, theme, logo, bgDark) {
   b.font = Font.systemFont(12);
   b.textColor = theme.error;
   b.lineLimit = 8;
-  b.minimumScaleFactor = 0.85;
 
   w.addSpacer(6);
   const tip = w.addText("Surge · 模块 · App 捕获 Token");
