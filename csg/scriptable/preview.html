@@ -90,6 +90,9 @@
     .widget.small .w-bal .num { font-size: 22px; }
     .widget.medium .w-bal .num { font-size: 22px; }
     .w-bal .unit { font-size: 12px; opacity: .75; }
+    /* 临界 (0,5]：橙；欠费/≤0：红 */
+    .w-bal.warn .num, .w-bal.warn .unit { color: #ff9f0a; }
+    .widget.light .w-bal.warn .num, .widget.light .w-bal.warn .unit { color: #c93400; }
     .w-bal.danger .num, .w-bal.danger .unit { color: #ff453a; }
     .widget.light .w-bal.danger .num, .widget.light .w-bal.danger .unit { color: #d70015; }
     .muted { opacity: .55; font-size: 10px; }
@@ -171,9 +174,11 @@
     <button type="button" id="btn-light">浅色</button>
     <label>余额模拟
       <select id="bal-sel">
-        <option value="26.4">26.40（正常）</option>
-        <option value="5">5.00（临界红）</option>
-        <option value="3.2">3.20（红色）</option>
+        <option value="26.4">26.40（正常 · 白/深色字）</option>
+        <option value="5">5.00（临界 · 橙色）</option>
+        <option value="3.2">3.20（临界 · 橙色）</option>
+        <option value="0">0.00（欠费红）</option>
+        <option value="-12">-12.00（欠费红）</option>
       </select>
     </label>
     <button type="button" id="btn-render">刷新预览</button>
@@ -210,12 +215,21 @@
       },
     };
 
-    function shortAddress(addr) {
+    function shortAddress(addr, maxLen) {
       if (!addr) return "";
-      const m = String(addr).match(
-        /([\u4e00-\u9fa5A-Za-z0-9]{1,12}(?:路|街|道|巷|弄|大街)\d+号)/
-      );
-      return m ? m[1] : addr.slice(0, 12);
+      let s = String(addr).trim();
+      // 仅广西需缩写；粤/云/贵/琼保持「xx省」
+      s = s.replace(/^广西壮族自治区/, "广西");
+      let out = s;
+      const road = s.match(/^(.*?(?:路|街|道|巷|弄|大街)\d+号)/);
+      if (road) out = road[1];
+      else {
+        const hao = s.match(/^(.*?\d+号)/);
+        if (hao) out = hao[1];
+      }
+      const lim = maxLen || 20;
+      if (out.length > lim) out = out.slice(0, lim - 1) + "…";
+      return out;
     }
     function fmt(v, d = 1) {
       if (v == null || v === "") return "--";
@@ -248,7 +262,8 @@
     function buildWidget(size, data, themeName) {
       const el = document.createElement("div");
       el.className = `widget ${size} ${themeName}`;
-      const low = data.eleBill.balance <= 5;
+      const balN = Number(data.eleBill.balance);
+      const balClass = balN <= 0 ? "danger" : balN <= 5 ? "warn" : "";
       const addr = shortAddress(data.userInfo.address);
       const m = data.monthElecQuantity;
       const d = data.dayElecQuantity;
@@ -262,7 +277,7 @@
         if (m.totalKwh != null) lines.push(`<div class="left-line"><span class="k">本月 </span><span class="v">${fmt(m.totalKwh, 1)} kWh</span></div>`);
         if (d.yesterday != null) lines.push(`<div class="left-line"><span class="k">${md(d.latestDay)} </span><span class="v">${fmt(d.yesterday, 1)} kWh</span></div>`);
         if (m.lastMonth?.totalKwh != null) {
-          lines.push(`<div class="left-line"><span class="k">上月 </span><span class="v">${fmt(m.lastMonth.totalKwh, 0)}度 ${fmt(m.lastMonth.totalCost, 0)}元</span></div>`);
+          lines.push(`<div class="left-line"><span class="k">上月 </span><span class="v">${fmt(m.lastMonth.totalKwh, 0)} kWh ${fmt(m.lastMonth.totalCost, 0)} 元</span></div>`);
         }
         const hbars = recent.map((r) => {
           const pct = Math.max(4, (r.kwh / maxK) * 100);
@@ -273,7 +288,7 @@
           <div class="w-head"><span class="w-title">南方电网</span>${logo}</div>
           <div class="med-body">
             <div class="med-left">
-              <div class="w-bal ${low ? "danger" : ""}"><span class="lbl">余额</span><span class="num">${fmt(data.eleBill.balance, 2)}</span><span class="unit"> 元</span></div>
+              <div class="w-bal ${balClass}"><span class="lbl">余额</span><span class="num">${fmt(data.eleBill.balance, 2)}</span><span class="unit"> 元</span></div>
               ${lines.join("")}
               <div class="foot" style="margin-top:auto;padding-top:6px">${addr}</div>
             </div>
@@ -288,7 +303,7 @@
       if (size === "small") {
         el.innerHTML = `
           <div class="w-head"><span class="w-title">南方电网</span>${logo}</div>
-          <div class="w-bal ${low ? "danger" : ""}"><span class="num">${fmt(data.eleBill.balance, 2)}</span><span class="unit"> 元</span></div>
+          <div class="w-bal ${balClass}"><span class="num">${fmt(data.eleBill.balance, 2)}</span><span class="unit"> 元</span></div>
           <div class="line">本月 ${fmt(m.totalKwh, 1)} kWh</div>
           <div class="line muted2">${md(d.latestDay)} ${fmt(d.yesterday, 1)} kWh</div>
           <div class="foot">${addr}</div>`;
@@ -311,7 +326,7 @@
 
       el.innerHTML = `
         <div class="w-head"><span class="w-title">南方电网</span>${logo}</div>
-        <div class="w-bal ${low ? "danger" : ""}"><span class="lbl">余额</span><span class="num">${fmt(data.eleBill.balance, 2)}</span><span class="unit"> 元</span></div>
+        <div class="w-bal ${balClass}"><span class="lbl">余额</span><span class="num">${fmt(data.eleBill.balance, 2)}</span><span class="unit"> 元</span></div>
         <div class="metrics">${metHtml}</div>
         <div class="large-bars-wrap">
           <div class="sec-title">近五日用电</div>

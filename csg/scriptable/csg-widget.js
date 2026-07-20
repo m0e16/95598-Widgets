@@ -23,6 +23,12 @@ const LOGO_CACHE = "csg-logo.png";
 const BG_DARK_CACHE = "csg-bg-dark.png";
 const REQUEST_TIMEOUT = 110;
 const DEFAULT_REFRESH_MINUTES = 60;
+/**
+ * 余额颜色：
+ * - ≤0 或欠费 → 红 danger
+ * - (0, 5] 临界 → 橙 warn
+ * - >5 → 正常
+ */
 const LOW_BALANCE = 5;
 
 const widgetFamily = config.widgetFamily || "medium";
@@ -71,9 +77,25 @@ function getTheme() {
     text3: dyn("#7A8796", "#FFFFFF", 1, 0.55),
     bar: dyn("#1A6BB5", "#0A84FF"),
     barTrack: dyn("#0B5CAB", "#FFFFFF", 0.12, 0.14),
+    /** 临界：余额 (0, 5] */
+    warn: dyn("#C93400", "#FF9F0A"),
+    /** 欠费/≤0 */
     danger: dyn("#D70015", "#FF453A"),
     error: dyn("#B85C00", "#FF9F0A"),
   };
+}
+
+/** 余额文字颜色 */
+function balanceColor(theme, balVal, isArrears) {
+  if (isArrears || (balVal != null && balVal <= 0)) return theme.danger;
+  if (balVal != null && balVal <= LOW_BALANCE) return theme.warn;
+  return theme.text;
+}
+
+function balanceUnitColor(theme, balVal, isArrears) {
+  if (isArrears || (balVal != null && balVal <= 0)) return theme.danger;
+  if (balVal != null && balVal <= LOW_BALANCE) return theme.warn;
+  return theme.text2;
 }
 
 // -------------------- Main --------------------
@@ -282,25 +304,30 @@ function fmtMD(dateStr) {
 }
 
 /**
- * 地址截到「XX路/街/道XX号」
- * 例：…青秀区长虹路10号万科城… → 长虹路10号
+ * 地址：南网五省区省份简写 + 截到「…路/街/道XX号」
+ * 覆盖：广东、广西、云南、贵州、海南
+ * 例：广西壮族自治区南宁市青秀区长虹路10号万科城…
+ *   → 广西南宁市青秀区长虹路10号
  */
-function shortAddress(addr) {
+function shortAddress(addr, maxLen) {
   if (!addr) return "";
-  const s = String(addr);
-  const m = s.match(
-    /([\u4e00-\u9fa5A-Za-z0-9]{1,12}(?:路|街|道|巷|弄|大街)\d+号)/
-  );
-  if (m) return m[1];
-  // 退路：仅门牌
-  const m2 = s.match(/(\d+号)/);
-  if (m2) {
-    const i = s.indexOf(m2[1]);
-    const head = s.slice(Math.max(0, i - 8), i + m2[1].length);
-    const m3 = head.match(/([\u4e00-\u9fa5]{1,8}(?:路|街|道|巷)?\d+号)/);
-    if (m3) return m3[1];
+  let s = String(addr).trim();
+
+  // 广西全称过长，单独缩成「广西」；粤/云/贵/琼原文已是「xx省」无需替换
+  s = s.replace(/^广西壮族自治区/, "广西");
+
+  // 截到第一个 路/街/道/巷/弄 + 门牌号
+  let out = s;
+  const road = s.match(/^(.*?(?:路|街|道|巷|弄|大街)\d+号)/);
+  if (road) {
+    out = road[1];
+  } else {
+    const hao = s.match(/^(.*?\d+号)/);
+    if (hao) out = hao[1];
   }
-  return s.length > 12 ? s.slice(0, 11) + "…" : s;
+  const lim = maxLen || (isSmall ? 16 : isMedium ? 20 : 24);
+  if (out.length > lim) out = out.slice(0, lim - 1) + "…";
+  return out;
 }
 
 function setRefresh(w) {
@@ -350,7 +377,6 @@ function buildWidget(item, theme, logo, bgDark, meta) {
   const isArrears =
     item.arrearsOfFees || arrears > 0 || (n(b.balance) || 0) < 0;
   const balVal = isArrears && arrears > 0 ? arrears : n(b.balance);
-  const isLowBal = balVal != null && balVal <= LOW_BALANCE;
   const addr = shortAddress(u.address || u.userName || u.accountNumber || "");
 
   addHeader(w, theme, logo);
@@ -361,7 +387,6 @@ function buildWidget(item, theme, logo, bgDark, meta) {
     buildMediumSplit(w, theme, {
       balVal,
       isArrears,
-      isLowBal,
       m,
       d,
       last,
@@ -371,7 +396,7 @@ function buildWidget(item, theme, logo, bgDark, meta) {
       meta,
     });
   } else {
-    addBalanceRow(w, theme, balVal, isArrears, isLowBal);
+    addBalanceRow(w, theme, balVal, isArrears);
     w.addSpacer(isSmall ? 4 : 6);
 
     if (isSmall) {
@@ -414,7 +439,7 @@ function addHeader(w, theme, logo) {
   }
 }
 
-function addBalanceRow(w, theme, balVal, isArrears, isLowBal) {
+function addBalanceRow(w, theme, balVal, isArrears) {
   const balStack = w.addStack();
   balStack.layoutHorizontally();
   balStack.bottomAlignContent();
@@ -427,11 +452,11 @@ function addBalanceRow(w, theme, balVal, isArrears, isLowBal) {
 
   const bal = balStack.addText(fmtOr(balVal, 2));
   bal.font = Font.boldSystemFont(isSmall ? 22 : 26);
-  bal.textColor = isArrears || isLowBal ? theme.danger : theme.text;
+  bal.textColor = balanceColor(theme, balVal, isArrears);
 
   const unit = balStack.addText(" 元");
   unit.font = Font.systemFont(12);
-  unit.textColor = isLowBal || isArrears ? theme.danger : theme.text2;
+  unit.textColor = balanceUnitColor(theme, balVal, isArrears);
 }
 
 function addFooter(w, theme, addr, meta) {
@@ -470,12 +495,10 @@ function buildMediumSplit(w, theme, ctx) {
   balLabel.textColor = theme.text3;
   const bal = balStack.addText(fmtOr(ctx.balVal, 2));
   bal.font = Font.boldSystemFont(22);
-  bal.textColor =
-    ctx.isArrears || ctx.isLowBal ? theme.danger : theme.text;
+  bal.textColor = balanceColor(theme, ctx.balVal, ctx.isArrears);
   const unit = balStack.addText(" 元");
   unit.font = Font.systemFont(11);
-  unit.textColor =
-    ctx.isLowBal || ctx.isArrears ? theme.danger : theme.text2;
+  unit.textColor = balanceUnitColor(theme, ctx.balVal, ctx.isArrears);
 
   left.addSpacer(4);
 
@@ -488,8 +511,8 @@ function buildMediumSplit(w, theme, ctx) {
   }
   if (n(ctx.last.totalKwh) != null || n(ctx.last.totalCost) != null) {
     const bits = [];
-    if (n(ctx.last.totalKwh) != null) bits.push(`${fmt(ctx.last.totalKwh, 0)}度`);
-    if (n(ctx.last.totalCost) != null) bits.push(`${fmt(ctx.last.totalCost, 0)}元`);
+    if (n(ctx.last.totalKwh) != null) bits.push(`${fmt(ctx.last.totalKwh, 0)} kWh`);
+    if (n(ctx.last.totalCost) != null) bits.push(`${fmt(ctx.last.totalCost, 0)} 元`);
     addLeftLine(left, "上月", bits.join(" "), theme);
   } else if (n(ctx.year.yearKwh) != null) {
     addLeftLine(left, "本年", `${fmt(ctx.year.yearKwh, 0)} kWh`, theme);
