@@ -6,9 +6,9 @@
 #!arguments-desc= TIMEOUT: 小组件拉数时脚本超时秒数，建议 120\n\n调试模式: true/1 时在脚本控制台输出详细请求日志\n\n使用方法：\n1. 安装并启用本模块，开启 MitM + 脚本\n2. 打开「南网在线」App，进入电费/用电页面自动捕获 Token\n3. Scriptable 小组件请求 https://api.csg-rewrite.com/electricity/bill/all
 
 [Script]
-南网Token捕获 = type=http-request, pattern=^https?:\/\/95598\.csg\.cn\/ucs\/ma\/, script-path=https://raw.githubusercontent.com/m0e16/95598-Widgets/main/csg/csg.js, requires-body=false, timeout=10
+南网Token捕获 = type=http-request, pattern=^https?:\/\/95598\.csg\.cn\/ucs\/ma\/, script-path=https://raw.githubusercontent.com/m0e16/95598-Widgets/main/csg.js, requires-body=false, timeout=10
 
-南网小组件接口 = type=http-request, pattern=^https?:\/\/api\.csg-rewrite\.com\/electricity\/bill\/all, script-path=https://raw.githubusercontent.com/m0e16/95598-Widgets/main/csg/csg.js, requires-body=true, max-size=-1, timeout={{{TIMEOUT}}}, argument=debug="{{{调试模式}}}"
+南网小组件接口 = type=http-request, pattern=^https?:\/\/api\.csg-rewrite\.com\/electricity\/bill\/all, script-path=https://raw.githubusercontent.com/m0e16/95598-Widgets/main/csg.js, requires-body=true, max-size=-1, timeout={{{TIMEOUT}}}, argument=debug="{{{调试模式}}}"
 
 [MITM]
 hostname = %APPEND% 95598.csg.cn, api.csg-rewrite.com

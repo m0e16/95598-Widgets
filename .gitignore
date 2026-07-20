@@ -1,0 +1,6 @@
+# 本地预览（不进仓库）
+.local-preview/
+preview.html
+**/preview.html
+.DS_Store
+*.log

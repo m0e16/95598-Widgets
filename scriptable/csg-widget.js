@@ -8,16 +8,15 @@
  * - Logo：浅色 csg.png / 深色 csg-white.png
  * - 中号左右分栏；大号竖柱居中；地址广西缩写 + 截到路号
  *
- * 浏览器预览：同目录 preview.html
  */
 
 const VERSION = "1.5.1";
 const DEFAULT_URL = "https://api.csg-rewrite.com/electricity/bill/all";
 const ASSET_BASE =
-  "https://raw.githubusercontent.com/m0e16/95598-Widgets/main/csg/scriptable/assets";
+  "https://raw.githubusercontent.com/m0e16/95598-Widgets/main/scriptable/assets";
 const LOGO_LIGHT_URL = `${ASSET_BASE}/csg.png`;
 const LOGO_DARK_URL = `${ASSET_BASE}/csg-white.png`;
-/** 深色模式背景（原 bg-dark.png 取色） */
+/** 深色模式背景纯色 */
 const BG_DARK_HEX = "#292929";
 const CACHE_FILE = "csg-widget-cache.json";
 const LOGO_LIGHT_CACHE = "csg-logo.png";
