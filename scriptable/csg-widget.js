@@ -2,25 +2,25 @@
 // These must be at the very top of the file. Do not edit.
 // icon-color: blue; icon-glyph: bolt;
 /**
- * 南方电网 · Scriptable 小组件 v1.5.1
+ * 南方电网 · Scriptable 小组件 v1.5.3
  *
- * - 深色背景：Color.dynamic（浅 #F0F5FC / 深 #292929）
- * - Logo：浅色 csg.png / 深色 csg-white.png
+ * - 背景 / 文字 / 柱色：Color.dynamic
+ * - Logo：csg-white.png 作模板，tintColor 随系统浅深蓝 / 深色白
+ *   品牌蓝取自 csg.png：#0A2366
  * - 中号左右分栏；大号竖柱居中；地址广西缩写 + 截到路号
- *
  */
 
-const VERSION = "1.5.2";
+const VERSION = "1.5.3";
 const DEFAULT_URL = "https://api.csg-rewrite.com/electricity/bill/all";
 const ASSET_BASE =
   "https://raw.githubusercontent.com/m0e16/95598-Widgets/main/scriptable/assets";
-const LOGO_LIGHT_URL = `${ASSET_BASE}/csg.png`;
-const LOGO_DARK_URL = `${ASSET_BASE}/csg-white.png`;
-/** 深色模式背景纯色 */
+/** 单色模板（白剪影），配合 tintColor 做深浅切换 */
+const LOGO_TEMPLATE_URL = `${ASSET_BASE}/csg-white.png`;
+/** 从彩色 csg.png 提取的品牌蓝 */
+const LOGO_BRAND_HEX = "#0A2366";
 const BG_DARK_HEX = "#292929";
 const CACHE_FILE = "csg-widget-cache.json";
-const LOGO_LIGHT_CACHE = "csg-logo.png";
-const LOGO_DARK_CACHE = "csg-logo-white.png";
+const LOGO_TEMPLATE_CACHE = "csg-logo-template.png";
 const REQUEST_TIMEOUT = 110;
 const DEFAULT_REFRESH_MINUTES = 60;
 /**
@@ -35,10 +35,6 @@ const widgetFamily = config.widgetFamily || "medium";
 const isSmall = widgetFamily === "small";
 const isLarge = widgetFamily === "large";
 const isMedium = !isSmall && !isLarge;
-const isDark =
-  typeof Device !== "undefined" && Device.isUsingDarkAppearance
-    ? Device.isUsingDarkAppearance()
-    : true;
 
 let params = {};
 try {
@@ -70,13 +66,14 @@ function dyn(lightHex, darkHex, lightAlpha, darkAlpha) {
 
 function getTheme() {
   return {
-    // 背景：Color.dynamic，随系统浅/深色切换（不再用 isDark 写死）
     bg: dyn("#F0F5FC", BG_DARK_HEX),
     text: dyn("#0B1F3A", "#FFFFFF"),
     text2: dyn("#3D4F63", "#FFFFFF", 1, 0.82),
     text3: dyn("#7A8796", "#FFFFFF", 1, 0.55),
     bar: dyn("#1A6BB5", "#0A84FF"),
     barTrack: dyn("#0B5CAB", "#FFFFFF", 0.12, 0.14),
+    /** Logo 模板着色：浅色品牌蓝 / 深色白 */
+    logoTint: dyn(LOGO_BRAND_HEX, "#FFFFFF"),
     /** 临界：余额 (0, 5] */
     warn: dyn("#C93400", "#FF9F0A"),
     /** 欠费/≤0 */
@@ -270,18 +267,19 @@ async function loadCachedImage(url, cacheName) {
   }
 }
 
-/** 按系统外观选 Logo：深色用白版，浅色用彩色版 */
+/** 加载单色模板 Logo（白剪影），着色见 applyLogoImage */
 async function loadLogo() {
-  if (isDark) {
-    return (
-      (await loadCachedImage(LOGO_DARK_URL, LOGO_DARK_CACHE)) ||
-      (await loadCachedImage(LOGO_LIGHT_URL, LOGO_LIGHT_CACHE))
-    );
-  }
-  return (
-    (await loadCachedImage(LOGO_LIGHT_URL, LOGO_LIGHT_CACHE)) ||
-    (await loadCachedImage(LOGO_DARK_URL, LOGO_DARK_CACHE))
-  );
+  return loadCachedImage(LOGO_TEMPLATE_URL, LOGO_TEMPLATE_CACHE);
+}
+
+/** 模板图 + Color.dynamic tint，随系统浅/深切换 */
+function applyLogoImage(parent, logo, theme, size) {
+  if (!logo) return null;
+  const img = parent.addImage(logo);
+  img.imageSize = new Size(size, size);
+  img.cornerRadius = Math.round(size * 0.2);
+  img.tintColor = theme.logoTint;
+  return img;
 }
 
 // -------------------- Format --------------------
@@ -427,12 +425,8 @@ function addHeader(w, theme, logo) {
 
   head.addSpacer();
 
-  if (logo) {
-    const logoSize = isSmall ? 34 : isMedium ? 38 : 46;
-    const img = head.addImage(logo);
-    img.imageSize = new Size(logoSize, logoSize);
-    img.cornerRadius = 8;
-  }
+  const logoSize = isSmall ? 34 : isMedium ? 38 : 46;
+  applyLogoImage(head, logo, theme, logoSize);
 }
 
 function addBalanceRow(w, theme, balVal, isArrears) {
@@ -783,11 +777,7 @@ function errorWidget(msg, theme, logo) {
   title.font = Font.boldSystemFont(14);
   title.textColor = theme.text;
   head.addSpacer();
-  if (logo) {
-    const img = head.addImage(logo);
-    img.imageSize = new Size(40, 40);
-    img.cornerRadius = 8;
-  }
+  applyLogoImage(head, logo, theme, 40);
 
   w.addSpacer(8);
   const b = w.addText(msg);
