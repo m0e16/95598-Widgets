@@ -481,16 +481,17 @@ function addFooter(w, theme, addr, meta) {
 
 /**
  * 中号：左文字 / 右柱图
- * - 正文区 bottom 对齐：右侧柱图底边对齐左侧「上月」一行
- * - 地址单独在下方，略向右缩进
+ * - 中间 addSpacer() 把柱图顶到右侧，避免全挤在左中
+ * - 正文区 bottom 对齐：柱图底边对齐左侧「上月」
+ * - 地址在下方单独一行
  */
 function buildMediumSplit(w, theme, ctx) {
   const body = w.addStack();
   body.layoutHorizontally();
   body.bottomAlignContent();
-  body.spacing = 10;
+  body.spacing = 0;
 
-  // —— 左：余额 + 指标（不含地址）——
+  // —— 左：余额 + 指标（内容宽度，不拉伸）——
   const left = body.addStack();
   left.layoutVertically();
   left.spacing = 3;
@@ -528,7 +529,10 @@ function buildMediumSplit(w, theme, ctx) {
     addLeftLine(left, "本年", `${fmt(ctx.year.yearKwh, 0)} kWh`, theme);
   }
 
-  // —— 右：近五日横向柱（左对齐填充）——
+  // —— 弹性空白：把右侧柱图推到靠右 ——
+  body.addSpacer();
+
+  // —— 右：近五日横向柱 ——
   if (SHOW_RECENT && ctx.recent.length) {
     const right = body.addStack();
     right.layoutVertically();
@@ -541,7 +545,6 @@ function buildMediumSplit(w, theme, ctx) {
   const foot = w.addStack();
   foot.layoutHorizontally();
   foot.centerAlignContent();
-  // 往右挪一点，别贴左边缘
   const indent = foot.addStack();
   indent.size = new Size(6, 1);
   const addrT = foot.addText(ctx.addr || "南网户号");
@@ -715,7 +718,8 @@ function addRecentBarsVertical(parent, recent, theme) {
  */
 function addRecentBarsHorizontalCompact(parent, recent, theme) {
   const maxK = Math.max(...recent.map((r) => n(r.kwh) || 0), 0.01);
-  const trackW = 72;
+  // 靠右后可略加长轨道，观感更舒展
+  const trackW = 88;
   const trackH = 6;
 
   const title = parent.addText("近五日");
