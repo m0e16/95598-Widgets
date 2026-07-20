@@ -93,12 +93,14 @@ https://raw.githubusercontent.com/m0e16/95598-Widgets/main/csg/scriptable/csg-wi
 {
   "url": "https://api.csg-rewrite.com/electricity/bill/all",
   "index": 0,
-  "showRecent": true
+  "showRecent": true,
+  "refreshMinutes": 60
 }
 ```
 
-- `index`：多户号时选第几个（从 0 开始）  
-- `showRecent`：是否显示近五日  
+- `index`：多户号时选第几个（从 0 开始；接口返回全部户号）  
+- `showRecent`：中/大尺寸是否显示近五日  
+- `refreshMinutes`：提示 iOS 约多少分钟后再刷新（默认 60，仅建议）  
 
 ### 数据流
 

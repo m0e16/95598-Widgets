@@ -8,11 +8,12 @@
  * 登录：打开「南网在线」App（Surge 开启）自动捕获 Token。
  * 覆盖：广东、广西、云南、贵州、海南
  *
+ * 仅运行于 Surge（无 Node / 青龙 / 其他代理 App 适配）。
  * 参考 API：CubicPill/china_southern_power_grid_stat (GPL-3.0)
  */
 
 const NAME = "南方电网";
-const VERSION = "1.2.0";
+const VERSION = "1.2.1";
 const BASE_APP = "https://95598.csg.cn/ucs/ma/zt/";
 const REWRITE_HOST = "api.csg-rewrite.com";
 
@@ -30,11 +31,7 @@ const STORE = {
 const RESP_OK = "00";
 const RESP_NO_LOGIN = "04";
 
-// -------------------- Env helpers --------------------
-
-const isSurge = typeof $httpClient !== "undefined";
-const isQX = typeof $task !== "undefined";
-const isNode = typeof require === "function" && typeof module !== "undefined";
+// -------------------- Env helpers (Surge only) --------------------
 
 function log(...args) {
   console.log(`[${NAME}]`, ...args);
@@ -50,58 +47,19 @@ function isDebug() {
 }
 
 function notify(title, subtitle, body) {
-  if (isSurge) {
-    $notification.post(title, subtitle || "", body || "");
-  } else if (isQX) {
-    $notify(title, subtitle || "", body || "");
-  } else {
-    log("NOTIFY:", title, subtitle, body);
-  }
+  $notification.post(title, subtitle || "", body || "");
 }
 
 function getStore(key) {
-  if (isSurge || typeof $persistentStore !== "undefined") {
-    return $persistentStore.read(key);
-  }
-  if (isQX) return $prefs.valueForKey(key);
-  if (isNode) {
-    try {
-      const fs = require("fs");
-      const p = "./csg-store.json";
-      if (!fs.existsSync(p)) return null;
-      const j = JSON.parse(fs.readFileSync(p, "utf8"));
-      return j[key] ?? null;
-    } catch (_) {
-      return null;
-    }
-  }
-  return null;
+  return $persistentStore.read(key);
 }
 
 function setStore(key, val) {
-  const s = val == null ? "" : String(val);
-  if (isSurge || typeof $persistentStore !== "undefined") {
-    $persistentStore.write(s, key);
-    return;
-  }
-  if (isQX) {
-    $prefs.setValueForKey(s, key);
-    return;
-  }
-  if (isNode) {
-    const fs = require("fs");
-    const p = "./csg-store.json";
-    let j = {};
-    try {
-      if (fs.existsSync(p)) j = JSON.parse(fs.readFileSync(p, "utf8"));
-    } catch (_) {}
-    j[key] = s;
-    fs.writeFileSync(p, JSON.stringify(j, null, 2));
-  }
+  $persistentStore.write(val == null ? "" : String(val), key);
 }
 
 function done(val) {
-  if (typeof $done === "function") $done(val || {});
+  $done(val || {});
 }
 
 function parseArgument(raw) {
@@ -122,11 +80,7 @@ function parseArgument(raw) {
 
 function getSettings() {
   const arg =
-    typeof $argument !== "undefined"
-      ? parseArgument($argument)
-      : isNode
-        ? parseArgument(process.env.CSG_ARGUMENT || "")
-        : {};
+    typeof $argument !== "undefined" ? parseArgument($argument) : {};
 
   const bool = (v, def = false) => {
     if (v === undefined || v === null || v === "") return def;
@@ -141,7 +95,7 @@ function getSettings() {
   };
 }
 
-// -------------------- HTTP --------------------
+// -------------------- HTTP (Surge $httpClient) --------------------
 
 function httpPost(url, body, headers) {
   return new Promise((resolve, reject) => {
@@ -150,7 +104,7 @@ function httpPost(url, body, headers) {
       headers: headers || {},
       body: typeof body === "string" ? body : JSON.stringify(body ?? {}),
     };
-    const handler = (err, resp, data) => {
+    $httpClient.post(opts, (err, resp, data) => {
       if (err) return reject(err);
       let json = data;
       if (typeof data === "string") {
@@ -160,52 +114,17 @@ function httpPost(url, body, headers) {
           const b = s.lastIndexOf("}");
           json = JSON.parse(a >= 0 ? s.slice(a, b + 1) : s);
         } catch (e) {
-          return reject(new Error("JSON parse fail: " + String(data).slice(0, 200)));
+          return reject(
+            new Error("JSON parse fail: " + String(data).slice(0, 200))
+          );
         }
       }
       resolve({
-        headers: resp?.headers || {},
-        status: resp?.status || resp?.statusCode || 200,
+        headers: (resp && resp.headers) || {},
+        status: (resp && (resp.status || resp.statusCode)) || 200,
         data: json,
       });
-    };
-    if (isSurge) {
-      $httpClient.post(opts, handler);
-    } else if (isQX) {
-      opts.method = "POST";
-      $task.fetch(opts).then(
-        (r) => handler(null, r, r.body),
-        (e) => handler(e)
-      );
-    } else if (isNode) {
-      // Node fallback for local test
-      const https = require("https");
-      const u = new URL(url);
-      const req = https.request(
-        {
-          hostname: u.hostname,
-          path: u.pathname + u.search,
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json;charset=utf-8",
-            "Content-Length": Buffer.byteLength(opts.body),
-            ...opts.headers,
-          },
-        },
-        (res) => {
-          let buf = "";
-          res.on("data", (c) => (buf += c));
-          res.on("end", () =>
-            handler(null, { status: res.statusCode, headers: res.headers }, buf)
-          );
-        }
-      );
-      req.on("error", reject);
-      req.write(opts.body);
-      req.end();
-    } else {
-      reject(new Error("unsupported runtime"));
-    }
+    });
   });
 }
 
