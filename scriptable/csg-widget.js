@@ -70,10 +70,8 @@ function dyn(lightHex, darkHex, lightAlpha, darkAlpha) {
 
 function getTheme() {
   return {
-    // 浅色渐变；深色纯色 #292929
-    bg0: dyn("#E8F2FF", BG_DARK_HEX),
-    bg1: dyn("#F5F9FF", BG_DARK_HEX),
-    bgDarkSolid: new Color(BG_DARK_HEX),
+    // 背景：Color.dynamic，随系统浅/深色切换（不再用 isDark 写死）
+    bg: dyn("#F0F5FC", BG_DARK_HEX),
     text: dyn("#0B1F3A", "#FFFFFF"),
     text2: dyn("#3D4F63", "#FFFFFF", 1, 0.82),
     text3: dyn("#7A8796", "#FFFFFF", 1, 0.55),
@@ -350,14 +348,8 @@ async function present(w) {
 }
 
 function applyBackground(w, theme) {
-  if (isDark) {
-    w.backgroundColor = theme.bgDarkSolid;
-    return;
-  }
-  const g = new LinearGradient();
-  g.locations = [0, 1];
-  g.colors = [theme.bg0, theme.bg1];
-  w.backgroundGradient = g;
+  // 纯色 + Color.dynamic：系统切换浅/深色时可随 trait 更新
+  w.backgroundColor = theme.bg;
 }
 
 // -------------------- Build UI --------------------
