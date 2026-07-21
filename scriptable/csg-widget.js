@@ -7,7 +7,7 @@
  * Logo：csg-white.png 模板 + tintColor（品牌蓝 #0A2366 / 白）
  */
 
-const VERSION = "1.5.6";
+const VERSION = "1.5.7";
 const DEFAULT_URL = "https://api.csg-rewrite.com/electricity/bill/all";
 const ASSET_BASE =
   "https://raw.githubusercontent.com/m0e16/95598-Widgets/main/scriptable/assets";
@@ -132,14 +132,20 @@ function enrich(item) {
     }
   }
 
-  if (d.yesterday == null && byDay.length) {
-    const row = byDay[byDay.length - 1];
+  // 近五日兜底
+  if (!d.recent?.length && byDay.length) d.recent = byDay.slice(-5);
+
+  // 昨日：API 有值 → 标签「昨日」；null 时用最近有数日，标签用 MM-DD（南网常中午前不出昨日）
+  if (num(d.yesterday) != null) {
+    d.yesterdayLabel = "昨日";
+  } else {
+    const series = byDay.length ? byDay : d.recent || [];
+    const row = series.length ? series[series.length - 1] : null;
     if (row && num(row.kwh) != null) {
       d.yesterday = row.kwh;
-      d.latestDay = row.date;
+      d.yesterdayLabel = fmtMD(row.date);
     }
   }
-  if (!d.recent?.length && byDay.length) d.recent = byDay.slice(-5);
 
   return {
     ...item,
@@ -341,7 +347,12 @@ function buildMedium(w, t, ctx) {
     addLeftLine(left, "本月", `${fmt(m.totalKwh, 1)} kWh`, t);
   }
   if (num(d.yesterday) != null) {
-    addLeftLine(left, "昨日", `${fmt(d.yesterday, 1)} kWh`, t);
+    addLeftLine(
+      left,
+      d.yesterdayLabel || "昨日",
+      `${fmt(d.yesterday, 1)} kWh`,
+      t
+    );
   }
   if (num(last.totalKwh) != null || num(last.totalCost) != null) {
     const bits = [];
@@ -375,9 +386,9 @@ function buildSmall(w, t, m, d) {
     line.lineLimit = 1;
     line.minimumScaleFactor = 0.8;
   }
-  // API 的 yesterday 字段：固定显示「昨日」，勿显示「近」或日期碎片
   if (num(d.yesterday) != null) {
-    const y = w.addText(`昨日 ${fmt(d.yesterday, 1)} kWh`);
+    const lab = d.yesterdayLabel || "昨日";
+    const y = w.addText(`${lab} ${fmt(d.yesterday, 1)} kWh`);
     y.font = Font.systemFont(10);
     y.textColor = t.text3;
     y.lineLimit = 1;
@@ -407,7 +418,7 @@ function buildLarge(w, t, m, d, last, year) {
         ? cell("本月电量", [`${fmt(m.totalKwh, 1)} kWh`])
         : null,
       num(d.yesterday) != null
-        ? cell("昨日", [`${fmt(d.yesterday, 1)} kWh`])
+        ? cell(d.yesterdayLabel || "昨日", [`${fmt(d.yesterday, 1)} kWh`])
         : null,
       lastLines.length ? cell("上月", lastLines) : null,
     ],
