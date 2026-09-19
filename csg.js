@@ -13,8 +13,13 @@
  */
 
 const NAME = "南方电网";
-const VERSION = "1.2.1";
-const BASE_APP = "https://95598.csg.cn/ucs/ma/zt/";
+const VERSION = "1.3.0";
+// mPaaS 版本 App 起，网关路径统一加了 /mp 前缀；两者后端都认，按顺序回退。
+const BASES_APP = [
+  "https://95598.csg.cn/mp/ucs/ma/zt/",
+  "https://95598.csg.cn/ucs/ma/zt/",
+];
+const BASE_APP = BASES_APP[0];
 const REWRITE_HOST = "api.csg-rewrite.com";
 
 const AREA_FALLBACK = "030000";
@@ -26,6 +31,7 @@ const STORE = {
   accounts: "csg_accounts_cache",
   lastResult: "csg_last_result",
   debug: "csg_debug",
+  diag: "csg_diag",
 };
 
 const RESP_OK = "00";
@@ -155,13 +161,27 @@ class CSGClient {
     return h;
   }
 
-  async request(path, payload, { auth = true, base = BASE_APP, extraHeaders = {} } = {}) {
-    const url = base + path;
-    const headers = this.commonHeaders(auth, extraHeaders);
-    debug("POST", path, payload);
-    const res = await httpPost(url, payload == null ? null : payload, headers);
-    debug("RESP", path, res.data?.sta, res.data?.message);
-    return res;
+  async request(path, payload, { auth = true, base = null, extraHeaders = {} } = {}) {
+    const bases = base ? [base] : BASES_APP;
+    let lastErr = null;
+    for (let i = 0; i < bases.length; i++) {
+      const b = bases[i];
+      const headers = this.commonHeaders(auth, extraHeaders);
+      try {
+        debug("POST", b + path, payload);
+        const res = await httpPost(b + path, payload == null ? null : payload, headers);
+        const sta = res.data && res.data.sta;
+        debug("RESP", b, sta, res.data && res.data.message);
+        if (sta === RESP_OK || sta === RESP_NO_LOGIN) {
+          this.activeBase = b;
+          return res;
+        }
+        lastErr = new Error((res.data && res.data.message) || `sta=${sta}`);
+      } catch (e) {
+        lastErr = e;
+      }
+    }
+    throw lastErr || new Error("所有接口前缀均无有效响应");
   }
 
   ensureOk(path, data) {
@@ -466,17 +486,58 @@ function requestHost() {
   }
 }
 
+function mask(v) {
+  const s = String(v == null ? "" : v);
+  if (s.length <= 8) return "len=" + s.length;
+  return s.slice(0, 4) + "…" + s.slice(-4) + " (len=" + s.length + ")";
+}
+
 function captureTokenFromRequest() {
   const headers = $request.headers || {};
   // Surge may normalize header keys
-  const token =
-    headerPick(headers, "x-auth-token") ||
-    headerPick(headers, "X-Auth-Token");
+  const candidates = [
+    "x-auth-token",
+    "X-Auth-Token",
+    "authorization",
+    "Authorization",
+    "x-token",
+    "token",
+    "x-mgs-token",
+    "x-access-token",
+  ];
+  let token = "";
+  let tokenHeader = "";
+  for (const name of candidates) {
+    const v = headerPick(headers, name);
+    if (v) {
+      // Authorization 需要带 Bearer 前缀时也照原样存
+      token = v;
+      tokenHeader = name;
+      break;
+    }
+  }
   const cust =
     headerPick(headers, "custNumber") ||
-    headerPick(headers, "custnumber");
+    headerPick(headers, "custnumber") ||
+    headerPick(headers, "x-cust-number");
+
+  // 记录诊断信息（只存头名与掩码值，便于定位，不泄露完整凭据）
+  const names = Object.keys(headers || {});
+  const diag = {
+    ts: new Date().toISOString(),
+    url: ($request.url || "").slice(0, 200),
+    method: $request.method || "",
+    headerNames: names.sort(),
+    candidatesFound: candidates
+      .map((n) => ({ name: n, value: headerPick(headers, n) }))
+      .filter((x) => x.value)
+      .map((x) => ({ name: x.name, masked: mask(x.value) })),
+    tokenHeader,
+  };
+  setStore(STORE.diag, JSON.stringify(diag));
 
   if (!token) {
+    log("未在请求头中找到 token，已记录头名用于诊断", names.join(","));
     done({});
     return;
   }
@@ -497,8 +558,8 @@ function captureTokenFromRequest() {
   );
 
   if (token !== prev) {
-    log("已捕获新的 x-auth-token");
-    notify(NAME, "登录态已更新", "已从南网请求中捕获 Token，可供小组件使用");
+    log("已捕获新的 token，来源头: " + tokenHeader);
+    notify(NAME, "登录态已更新", "已捕获 Token（" + tokenHeader + "），可供小组件使用");
   } else {
     debug("token unchanged");
   }
@@ -580,8 +641,29 @@ async function main() {
   }
 
   const host = requestHost();
-  if (host === "95598.csg.cn") {
+  if (host === "95598.csg.cn" || /(^|\.)csg\.cn$/i.test(host)) {
     captureTokenFromRequest();
+    return;
+  }
+
+  // 诊断入口：GET https://api.csg-rewrite.com/electricity/bill/diag
+  // 只返回头名与掩码值，不含任何完整凭据
+  if (REWRITE_HOST && host === REWRITE_HOST && ($request.url || "").includes("diag")) {
+    let d = null;
+    try {
+      d = JSON.parse(getStore(STORE.diag) || "null");
+    } catch (_) {
+      d = null;
+    }
+    done(
+      serviceResponse({
+        version: VERSION,
+        hasToken: !!getStore(STORE.token),
+        tokenLen: (getStore(STORE.token) || "").length,
+        custNumber: getStore(STORE.cust) || "",
+        lastCapture: d,
+      })
+    );
     return;
   }
 
